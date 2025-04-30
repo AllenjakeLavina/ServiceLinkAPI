@@ -1,0 +1,508 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// User model - base user for both service providers and clients
+model User {
+  id             String         @id @default(uuid())
+  email          String         @unique
+  password       String
+  firstName      String
+  lastName       String
+  profilePicture String?
+  phone          String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  role           Role           @default(CLIENT)
+  isVerified     Boolean        @default(false)
+  isActive       Boolean        @default(true)
+  
+  // User can be either a service provider or a client or both
+  serviceProvider ServiceProvider?
+  client          Client?
+  
+  // Notifications
+  receivedNotifications Notification[] @relation("ReceivedNotifications")
+  
+  // Messages
+  sentMessages     Message[]      @relation("SentMessages")
+  receivedMessages Message[]      @relation("ReceivedMessages")
+  
+  // Reviews
+  givenReviews     Review[]       @relation("ReviewGiver")
+  receivedReviews  Review[]       @relation("ReviewReceiver")
+  
+  // Verification and reset tokens
+  verificationTokens VerificationToken[]
+  resetPasswordTokens ResetPasswordToken[]
+}
+
+enum Role {
+ ADMIN
+ CLIENT
+ PROVIDER
+}
+
+// Service Provider model - for freelancers offering services (tutors, cleaners, etc.)
+model ServiceProvider {
+  id              String           @id @default(uuid())
+  userId          String           @unique
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio             String?          @db.Text
+  headline        String?
+  workExperience  WorkExperience[]
+  education       Education[]
+  skills          Skill[]
+  portfolio       Portfolio[]
+  documents       Document[]       // For certificates, licenses, etc.
+  hourlyRate      Decimal?         @db.Decimal(10, 2)
+  rating          Float?           @default(0)
+  services        Service[]
+  availability    Availability[]
+  
+  // Location tracking
+  currentLocation Location?
+  
+  // Service bookings they're providing
+  serviceBookings ServiceBooking[] @relation("ServiceProvider")
+  
+  // Proposals they've submitted
+  proposals       Proposal[]
+}
+
+// Client model - for individuals hiring service providers
+model Client {
+  id              String          @id @default(uuid())
+  userId          String          @unique
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  addresses       Address[]
+  
+  // Service bookings they've requested
+  serviceBookings ServiceBooking[] @relation("Client")
+  
+  // Service requests they've posted
+  serviceRequests ServiceRequest[]
+}
+
+// Work Experience for service providers
+model WorkExperience {
+  id                String         @id @default(uuid())
+  serviceProviderId String
+  serviceProvider   ServiceProvider @relation(fields: [serviceProviderId], references: [id], onDelete: Cascade)
+  company           String
+  position          String
+  startDate         DateTime
+  endDate           DateTime?
+  description       String?        @db.Text
+  isCurrentPosition Boolean        @default(false)
+}
+
+// Education for service providers
+model Education {
+  id                String         @id @default(uuid())
+  serviceProviderId String
+  serviceProvider   ServiceProvider @relation(fields: [serviceProviderId], references: [id], onDelete: Cascade)
+  institution       String
+  degree            String
+  fieldOfStudy      String?
+  startDate         DateTime
+  endDate           DateTime?
+  isCurrentlyStudying Boolean      @default(false)
+}
+
+// Skills for service providers
+model Skill {
+  id                String         @id @default(uuid())
+  name              String
+  
+  // Many-to-many relation
+  serviceProviders  ServiceProvider[]
+  services          Service[]
+}
+
+// Portfolio items for service providers
+model Portfolio {
+  id                String         @id @default(uuid())
+  serviceProviderId String
+  serviceProvider   ServiceProvider @relation(fields: [serviceProviderId], references: [id], onDelete: Cascade)
+  title             String
+  description       String?        @db.Text
+  imageUrls         String?        @db.Text // Store as JSON string of URLs
+  projectUrl        String?
+  createdAt         DateTime       @default(now())
+}
+
+// Documents for service providers (e.g., certifications, ID, etc.)
+model Document {
+  id                String         @id @default(uuid())
+  serviceProviderId String
+  serviceProvider   ServiceProvider @relation(fields: [serviceProviderId], references: [id], onDelete: Cascade)
+  title             String
+  type              DocumentType
+  fileUrl           String
+  isVerified        Boolean        @default(false)
+  uploadedAt        DateTime       @default(now())
+}
+
+enum DocumentType {
+  ID
+  CERTIFICATE
+  LICENSE
+  RESUME
+  OTHER
+}
+
+// Service categories (e.g., Tutoring, Housekeeping, Handyman, etc.)
+model Category {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  description String?   @db.Text
+  imageUrl    String?
+  services    Service[]
+  
+  // Service requests in this category
+  serviceRequests ServiceRequest[]
+}
+
+// Services offered by service providers (e.g., "Math Tutoring", "Piano Lessons")
+model Service {
+  id                String         @id @default(uuid())
+  serviceProviderId String
+  serviceProvider   ServiceProvider @relation(fields: [serviceProviderId], references: [id], onDelete: Cascade)
+  title             String
+  description       String         @db.Text
+  categoryId        String
+  category          Category       @relation(fields: [categoryId], references: [id])
+  pricing           Decimal        @db.Decimal(10, 2)
+  pricingType       PricingType    @default(HOURLY)
+  imageUrls         String?        @db.Text // Store as JSON string of URLs
+  isActive          Boolean        @default(true)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  
+  // Skills related to this service
+  skills            Skill[]
+  
+  // Service bookings for this service
+  serviceBookings   ServiceBooking[]
+  
+  // Proposals using this service
+  proposals         Proposal[]
+}
+
+enum PricingType {
+  HOURLY
+  FIXED
+  DAILY
+  SESSION // For services like lessons that are priced per session
+}
+
+// ServiceRequest model - when clients post job requests (e.g., "I need a tutor for my son")
+model ServiceRequest {
+  id          String    @id @default(uuid())
+  clientId    String
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  title       String
+  description String    @db.Text
+  categoryId  String
+  category    Category  @relation(fields: [categoryId], references: [id])
+  budget      Decimal?  @db.Decimal(10, 2)
+  budgetType  PricingType @default(FIXED)
+  location    String?
+  date        DateTime? // Specific date needed for the service
+  startTime   String?   // Preferred start time (format: "HH:MM")
+  duration    Int?      // Expected duration in hours
+  deadline    DateTime? // Deadline for applications
+  status      ServiceRequestStatus @default(OPEN)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Proposals for this service request
+  proposals   Proposal[]
+
+  ServiceBooking ServiceBooking[]
+}
+
+enum ServiceRequestStatus {
+  OPEN
+  CLOSED
+  CANCELLED
+  ASSIGNED
+}
+
+// Proposals by service providers for service requests
+model Proposal {
+  id                 String    @id @default(uuid())
+  serviceRequestId   String
+  serviceRequest     ServiceRequest @relation(fields: [serviceRequestId], references: [id], onDelete: Cascade)
+  serviceProviderId  String
+  serviceProvider    ServiceProvider @relation(fields: [serviceProviderId], references: [id])
+  serviceId          String
+  service            Service   @relation(fields: [serviceId], references: [id])
+  message            String    @db.Text  // Cover message from provider to client
+  price              Decimal   @db.Decimal(10, 2)
+  pricingType        PricingType @default(HOURLY)
+  availableDate      DateTime? // Alternative date provider can do the service
+  estimatedDuration  Int?      // In hours
+  status             ProposalStatus @default(PENDING)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+enum ProposalStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+// Service booking - when a client books a service provider (e.g., booking a tutor)
+model ServiceBooking {
+  id                String         @id @default(uuid())
+  clientId          String
+  client            Client         @relation("Client", fields: [clientId], references: [id])
+  serviceProviderId String
+  serviceProvider   ServiceProvider @relation("ServiceProvider", fields: [serviceProviderId], references: [id])
+  serviceId         String
+  service           Service        @relation(fields: [serviceId], references: [id])
+  startTime         DateTime
+  endTime           DateTime?      // Null until service is completed
+  totalHours        Float?         // Calculated when service is completed
+  status            BookingStatus  @default(PENDING)
+  totalAmount       Decimal?       @db.Decimal(10, 2)  // Final amount
+  notes             String?        @db.Text
+  title             String?        // e.g., "Math tutoring for John"
+  description       String?        @db.Text // Additional details about the booking
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  
+  // Address/location for this booking
+  addressId         String?
+  address           Address?       @relation(fields: [addressId], references: [id])
+  
+  // Request that led to this booking (if applicable)
+  serviceRequestId  String?
+  serviceRequest    ServiceRequest? @relation(fields: [serviceRequestId], references: [id])
+  
+  // Payment related to this booking
+  payment           Payment?
+  
+  // Timer records for this booking
+  timeRecords       TimeRecord[]
+  
+  // Messages related to this booking
+  chatRoom          ChatRoom?
+
+  // Contract related to this booking
+  contract          Contract?
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  DISPUTED
+}
+
+// Time records for tracking working hours
+model TimeRecord {
+  id               String        @id @default(uuid())
+  serviceBookingId String
+  serviceBooking   ServiceBooking @relation(fields: [serviceBookingId], references: [id], onDelete: Cascade)
+  startTime        DateTime
+  endTime          DateTime?     // Null if currently active
+  duration         Float?        // In hours, calculated when endTime is set
+  notes            String?       @db.Text
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  // Location where the time record was created (for verification)
+  latitude         Float?
+  longitude        Float?
+}
+
+// Chat room for a service booking
+model ChatRoom {
+  id               String        @id @default(uuid())
+  serviceBookingId String        @unique
+  serviceBooking   ServiceBooking @relation(fields: [serviceBookingId], references: [id], onDelete: Cascade)
+  messages         Message[]
+  createdAt        DateTime      @default(now())
+}
+
+// Messages within a chat room
+model Message {
+  id           String    @id @default(uuid())
+  chatRoomId   String
+  chatRoom     ChatRoom  @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
+  senderId     String
+  sender       User      @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId   String
+  receiver     User      @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  content      String    @db.Text
+  attachments  String?   @db.Text // Store as JSON string of URLs
+  isRead       Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+}
+
+// Payment model
+model Payment {
+  id               String        @id @default(uuid())
+  serviceBookingId String        @unique
+  serviceBooking   ServiceBooking @relation(fields: [serviceBookingId], references: [id], onDelete: Cascade)
+  amount           Decimal       @db.Decimal(10, 2)
+  status           PaymentStatus @default(PENDING)
+  paymentMethod    String?
+  transactionId    String?
+  paymentDate      DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+// Contract for a service booking (simple agreement between client and provider)
+model Contract {
+  id               String        @id @default(uuid())
+  serviceBookingId String        @unique
+  serviceBooking   ServiceBooking @relation(fields: [serviceBookingId], references: [id], onDelete: Cascade)
+  terms            String        @db.Text
+  paymentAmount    Decimal       @db.Decimal(10, 2)
+  paymentType      PricingType   @default(HOURLY)
+  clientSigned     Boolean       @default(false)
+  providerSigned   Boolean       @default(false)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+}
+
+// Reviews after service completion
+model Review {
+  id             String    @id @default(uuid())
+  rating         Float     // e.g., 1-5 stars
+  comment        String?   @db.Text
+  createdAt      DateTime  @default(now())
+  
+  // Who gave the review
+  giverId        String
+  giver          User      @relation("ReviewGiver", fields: [giverId], references: [id], onDelete: Cascade)
+  
+  // Who received the review
+  receiverId     String
+  receiver       User      @relation("ReviewReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+}
+
+// Notification model
+model Notification {
+  id          String            @id @default(uuid())
+  receiverId  String
+  receiver    User              @relation("ReceivedNotifications", fields: [receiverId], references: [id], onDelete: Cascade)
+  type        NotificationType
+  title       String
+  message     String            @db.Text
+  isRead      Boolean           @default(false)
+  data        String?           @db.Text // Additional JSON data
+  createdAt   DateTime          @default(now())
+}
+
+enum NotificationType {
+  BOOKING_REQUEST
+  BOOKING_CONFIRMED
+  BOOKING_CANCELLED
+  PAYMENT_RECEIVED
+  NEW_MESSAGE
+  REVIEW_RECEIVED
+  SERVICE_COMPLETED
+  CONTRACT_SIGNED
+  GENERAL
+}
+
+// Location for real-time tracking
+model Location {
+  id                String         @id @default(uuid())
+  serviceProviderId String         @unique
+  serviceProvider   ServiceProvider @relation(fields: [serviceProviderId], references: [id], onDelete: Cascade)
+  latitude          Float
+  longitude         Float
+  lastUpdated       DateTime       @default(now())
+}
+
+// Address model
+model Address {
+  id            String    @id @default(uuid())
+  clientId      String
+  client        Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  type          AddressType @default(HOME)
+  addressLine1  String
+  addressLine2  String?
+  city          String
+  state         String
+  postalCode    String
+  country       String
+  latitude      Float?
+  longitude     Float?
+  isDefault     Boolean   @default(false)
+  
+  // Service bookings at this address
+  serviceBookings ServiceBooking[]
+}
+
+enum AddressType {
+  HOME
+  WORK
+  OTHER
+}
+
+// Availability slots for service providers
+model Availability {
+  id                String         @id @default(uuid())
+  serviceProviderId String
+  serviceProvider   ServiceProvider @relation(fields: [serviceProviderId], references: [id], onDelete: Cascade)
+  dayOfWeek         Int            // 0-6 (Sunday-Saturday)
+  startTime         String         // Format: "HH:MM" in 24-hour
+  endTime           String         // Format: "HH:MM" in 24-hour
+  isAvailable       Boolean        @default(true)
+}
+
+// Verification token model for verifying email, phone, etc.
+model VerificationToken {
+  id        String      @id @default(uuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String      @unique
+  type      VerificationType
+  expiresAt DateTime
+  createdAt DateTime    @default(now())
+  isUsed    Boolean     @default(false)
+}
+
+enum VerificationType {
+  EMAIL
+  PHONE
+  IDENTITY
+  TWO_FACTOR
+}
+
+// Password reset tokens
+model ResetPasswordToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  isUsed    Boolean   @default(false)
+}
