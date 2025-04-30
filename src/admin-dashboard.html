@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f7fa;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .card h2 {
+            margin-top: 0;
+            color: #333;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+        }
+        .tab.active {
+            border-bottom: 2px solid #2196F3;
+            font-weight: bold;
+        }
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        table th, table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        table th {
+            background-color: #f5f5f5;
+        }
+        button {
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0b7dda;
+        }
+        .login-form {
+            max-width: 400px;
+            margin: 100px auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .hidden {
+            display: none;
+        }
+        .provider-card {
+            display: flex;
+            margin-bottom: 15px;
+            border: 1px solid #eee;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .provider-info {
+            flex: 1;
+        }
+        .provider-actions {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+        .provider-actions button {
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="login-container" class="login-form">
+        <h2>Admin Login</h2>
+        <div class="form-group">
+            <label for="email">Email:</label>
+            <input type="email" id="email" placeholder="Enter your email">
+        </div>
+        <div class="form-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" placeholder="Enter your password">
+        </div>
+        <button id="login-btn">Login</button>
+    </div>
+
+    <div id="dashboard-container" class="container hidden">
+        <div class="header">
+            <h1>Admin Dashboard</h1>
+            <button id="logout-btn">Logout</button>
+        </div>
+
+        <div class="tabs">
+            <div class="tab active" data-tab="unverified-providers">Unverified Providers</div>
+            <div class="tab" data-tab="all-providers">All Providers</div>
+            <div class="tab" data-tab="all-clients">All Clients</div>
+            <div class="tab" data-tab="user-management">User Management</div>
+        </div>
+
+        <!-- Unverified Providers Tab -->
+        <div id="unverified-providers" class="tab-content active">
+            <div class="card">
+                <h2>Providers Awaiting Verification</h2>
+                <div id="unverified-providers-list">
+                    <!-- Unverified providers will be loaded here -->
+                    <div class="loading">Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- All Providers Tab -->
+        <div id="all-providers" class="tab-content">
+            <div class="card">
+                <h2>All Service Providers</h2>
+                <div id="providers-list">
+                    <!-- Providers will be loaded here -->
+                    <div class="loading">Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- All Clients Tab -->
+        <div id="all-clients" class="tab-content">
+            <div class="card">
+                <h2>All Clients</h2>
+                <div id="clients-list">
+                    <!-- Clients will be loaded here -->
+                    <div class="loading">Loading...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- User Management Tab -->
+        <div id="user-management" class="tab-content">
+            <div class="card">
+                <h2>Change User Password</h2>
+                <div class="form-group">
+                    <label for="user-id">User ID:</label>
+                    <input type="text" id="user-id" placeholder="Enter user ID">
+                </div>
+                <div class="form-group">
+                    <label for="new-password">New Password:</label>
+                    <input type="password" id="new-password" placeholder="Enter new password">
+                </div>
+                <button id="change-password-btn">Change Password</button>
+                <div id="password-change-result" class="result"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API base URL
+        const API_BASE_URL = 'http://localhost:5500/api';
+        
+        // DOM elements
+        const loginContainer = document.getElementById('login-container');
+        const dashboardContainer = document.getElementById('dashboard-container');
+        const loginBtn = document.getElementById('login-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const tabs = document.querySelectorAll('.tab');
+        const tabContents = document.querySelectorAll('.tab-content');
+        const changePasswordBtn = document.getElementById('change-password-btn');
+        
+        // Check if user is logged in
+        function checkAuth() {
+            const token = localStorage.getItem('adminToken');
+            if (token) {
+                loginContainer.classList.add('hidden');
+                dashboardContainer.classList.remove('hidden');
+                loadUnverifiedProviders();
+            } else {
+                loginContainer.classList.remove('hidden');
+                dashboardContainer.classList.add('hidden');
+            }
+        }
+        
+        // Tab switching
+        tabs.forEach(tab => {
+            tab.addEventListener('click', function() {
+                const tabId = this.getAttribute('data-tab');
+                
+                // Remove active class from all tabs
+                tabs.forEach(t => t.classList.remove('active'));
+                tabContents.forEach(c => c.classList.remove('active'));
+                
+                // Add active class to clicked tab
+                this.classList.add('active');
+                document.getElementById(tabId).classList.add('active');
+                
+                // Load data based on tab
+                if (tabId === 'unverified-providers') {
+                    loadUnverifiedProviders();
+                } else if (tabId === 'all-providers') {
+                    loadAllProviders();
+                } else if (tabId === 'all-clients') {
+                    loadAllClients();
+                }
+            });
+        });
+        
+        // Login
+        loginBtn.addEventListener('click', async () => {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            if (!email || !password) {
+                alert('Please enter both email and password');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Check if user is admin
+                    if (data.data.user.role !== 'ADMIN') {
+                        alert('Only administrators can access this dashboard');
+                        return;
+                    }
+                    
+                    // Save token and show dashboard
+                    localStorage.setItem('adminToken', data.data.token);
+                    checkAuth();
+                } else {
+                    alert(data.message || 'Login failed');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                alert('An error occurred during login');
+            }
+        });
+        
+        // Logout
+        logoutBtn.addEventListener('click', () => {
+            localStorage.removeItem('adminToken');
+            checkAuth();
+        });
+        
+        // Load unverified providers
+        async function loadUnverifiedProviders() {
+            const token = localStorage.getItem('adminToken');
+            if (!token) return;
+            
+            const unverifiedProvidersList = document.getElementById('unverified-providers-list');
+            unverifiedProvidersList.innerHTML = '<div class="loading">Loading...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/admin/providers/unverified`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    if (data.data.length === 0) {
+                        unverifiedProvidersList.innerHTML = '<p>No providers awaiting verification</p>';
+                        return;
+                    }
+                    
+                    let html = '';
+                    
+                    data.data.forEach(provider => {
+                        const hasDocuments = provider.documents && provider.documents.length > 0;
+                        
+                        html += `
+                            <div class="provider-card">
+                                <div class="provider-info">
+                                    <h3>${provider.user.firstName} ${provider.user.lastName}</h3>
+                                    <p>Email: ${provider.user.email}</p>
+                                    <p>Phone: ${provider.user.phone || 'Not provided'}</p>
+                                    <p>ID Documents: ${hasDocuments ? `${provider.documents.length} document(s)` : 'No documents uploaded'}</p>
+                                </div>
+                                <div class="provider-actions">
+                                    <button onclick="verifyProvider('${provider.id}')">Verify Provider</button>
+                                    <button onclick="rejectProvider('${provider.id}')">Reject</button>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    
+                    unverifiedProvidersList.innerHTML = html;
+                } else {
+                    unverifiedProvidersList.innerHTML = `<p>Error: ${data.message}</p>`;
+                }
+            } catch (error) {
+                console.error('Error loading unverified providers:', error);
+                unverifiedProvidersList.innerHTML = '<p>Failed to load unverified providers</p>';
+            }
+        }
+        
+        // Load all providers
+        async function loadAllProviders() {
+            const token = localStorage.getItem('adminToken');
+            if (!token) return;
+            
+            const providersList = document.getElementById('providers-list');
+            providersList.innerHTML = '<div class="loading">Loading...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/admin/providers`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    if (data.data.length === 0) {
+                        providersList.innerHTML = '<p>No providers found</p>';
+                        return;
+                    }
+                    
+                    let html = '<table>';
+                    html += `
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Status</th>
+                            <th>Services</th>
+                            <th>Skills</th>
+                        </tr>
+                    `;
+                    
+                    data.data.forEach(provider => {
+                        const skills = provider.skills.map(s => s.name).join(', ');
+                        const services = provider.services.length;
+                        
+                        html += `
+                            <tr>
+                                <td>${provider.user.firstName} ${provider.user.lastName}</td>
+                                <td>${provider.user.email}</td>
+                                <td>${provider.user.phone || 'Not provided'}</td>
+                                <td>${provider.isProviderVerified ? 'Verified' : 'Pending Verification'}</td>
+                                <td>${services} service(s)</td>
+                                <td>${skills || 'No skills listed'}</td>
+                            </tr>
+                        `;
+                    });
+                    
+                    html += '</table>';
+                    providersList.innerHTML = html;
+                } else {
+                    providersList.innerHTML = `<p>Error: ${data.message}</p>`;
+                }
+            } catch (error) {
+                console.error('Error loading providers:', error);
+                providersList.innerHTML = '<p>Failed to load providers</p>';
+            }
+        }
+        
+        // Load all clients
+        async function loadAllClients() {
+            const token = localStorage.getItem('adminToken');
+            if (!token) return;
+            
+            const clientsList = document.getElementById('clients-list');
+            clientsList.innerHTML = '<div class="loading">Loading...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/admin/clients`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    if (data.data.length === 0) {
+                        clientsList.innerHTML = '<p>No clients found</p>';
+                        return;
+                    }
+                    
+                    let html = '<table>';
+                    html += `
+                        <tr>
+                            <th>Name</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th>Status</th>
+                            <th>Addresses</th>
+                            <th>Bookings</th>
+                        </tr>
+                    `;
+                    
+                    data.data.forEach(client => {
+                        const addresses = client.addresses.length;
+                        
+                        html += `
+                            <tr>
+                                <td>${client.user.firstName} ${client.user.lastName}</td>
+                                <td>${client.user.email}</td>
+                                <td>${client.user.phone || 'Not provided'}</td>
+                                <td>${client.user.isActive ? 'Active' : 'Inactive'}</td>
+                                <td>${addresses} address(es)</td>
+                                <td>${client.bookingCount} booking(s)</td>
+                            </tr>
+                        `;
+                    });
+                    
+                    html += '</table>';
+                    clientsList.innerHTML = html;
+                } else {
+                    clientsList.innerHTML = `<p>Error: ${data.message}</p>`;
+                }
+            } catch (error) {
+                console.error('Error loading clients:', error);
+                clientsList.innerHTML = '<p>Failed to load clients</p>';
+            }
+        }
+        
+        // Change user password
+        changePasswordBtn.addEventListener('click', async () => {
+            const userId = document.getElementById('user-id').value;
+            const newPassword = document.getElementById('new-password').value;
+            const resultElement = document.getElementById('password-change-result');
+            
+            if (!userId || !newPassword) {
+                resultElement.innerHTML = '<p style="color: red">Please enter both User ID and new password</p>';
+                return;
+            }
+            
+            const token = localStorage.getItem('adminToken');
+            if (!token) {
+                resultElement.innerHTML = '<p style="color: red">You must be logged in</p>';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/admin/users/change-password`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ userId, newPassword })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultElement.innerHTML = '<p style="color: green">Password changed successfully</p>';
+                    document.getElementById('user-id').value = '';
+                    document.getElementById('new-password').value = '';
+                } else {
+                    resultElement.innerHTML = `<p style="color: red">Error: ${data.message}</p>`;
+                }
+            } catch (error) {
+                console.error('Error changing password:', error);
+                resultElement.innerHTML = '<p style="color: red">Failed to change password</p>';
+            }
+        });
+        
+        // Verify provider
+        window.verifyProvider = async (providerId) => {
+            const token = localStorage.getItem('adminToken');
+            if (!token) return;
+            
+            if (!confirm('Are you sure you want to verify this provider?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/admin/providers/verify`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ providerId })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('Provider verified successfully');
+                    loadUnverifiedProviders();
+                } else {
+                    alert(`Error: ${data.message}`);
+                }
+            } catch (error) {
+                console.error('Error verifying provider:', error);
+                alert('Failed to verify provider');
+            }
+        };
+        
+        // Reject provider
+        window.rejectProvider = async (providerId) => {
+            const token = localStorage.getItem('adminToken');
+            if (!token) return;
+            
+            const reason = prompt('Please provide a reason for rejection:');
+            if (!reason) {
+                alert('Rejection reason is required');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/admin/providers/reject`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ providerId, reason })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('Provider rejection sent successfully');
+                    loadUnverifiedProviders();
+                } else {
+                    alert(`Error: ${data.message}`);
+                }
+            } catch (error) {
+                console.error('Error rejecting provider:', error);
+                alert('Failed to reject provider');
+            }
+        };
+        
+        // Initial check
+        checkAuth();
+    </script>
+</body>
+</html> 

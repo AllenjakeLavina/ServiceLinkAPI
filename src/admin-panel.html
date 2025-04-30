@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel - Provider Verification</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 1200px; margin: 0 auto; padding: 20px; }
+        h1, h2 { color: #333; }
+        .auth-container { 
+            border: 1px solid #ddd; 
+            padding: 20px; 
+            border-radius: 5px; 
+            margin-bottom: 20px; 
+        }
+        .provider-list {
+            margin-top: 30px;
+            display: none;
+        }
+        .provider-card {
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+            background-color: #f9f9f9;
+        }
+        .provider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .provider-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .provider-actions {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        }
+        .document-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+        }
+        .document-link {
+            display: inline-block;
+            margin-top: 10px;
+            padding: 8px 12px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            text-decoration: none;
+            color: #333;
+        }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, textarea { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        button {
+            padding: 8px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button.primary { background-color: #4CAF50; color: white; }
+        button.danger { background-color: #f44336; color: white; }
+        button.secondary { background-color: #2196F3; color: white; }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 100;
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            width: 400px;
+            max-width: 90%;
+        }
+        .loading { text-align: center; display: none; margin: 20px 0; }
+        .no-providers { text-align: center; display: none; margin: 30px 0; color: #666; }
+    </style>
+</head>
+<body>
+    <h1>Admin Panel - Provider Verification</h1>
+    
+    <div class="auth-container">
+        <h2>Authentication</h2>
+        <div class="form-group">
+            <label for="token">Admin JWT Token:</label>
+            <input type="text" id="token" name="token" placeholder="Enter your admin JWT token here">
+        </div>
+        <button id="loadProviders" class="primary">Load Unverified Providers</button>
+    </div>
+
+    <div id="loading" class="loading">
+        <p>Loading providers...</p>
+    </div>
+
+    <div id="noProviders" class="no-providers">
+        <p>No unverified providers found.</p>
+    </div>
+    
+    <div id="providerList" class="provider-list">
+        <h2>Unverified Providers</h2>
+        <div id="providerCards"></div>
+    </div>
+
+    <div id="rejectModal" class="modal">
+        <div class="modal-content">
+            <h2>Reject Provider</h2>
+            <div class="form-group">
+                <label for="rejectReason">Rejection Reason:</label>
+                <textarea id="rejectReason" rows="4" placeholder="Provide a reason for rejection"></textarea>
+            </div>
+            <div class="provider-actions">
+                <button id="cancelReject" class="secondary">Cancel</button>
+                <button id="confirmReject" class="danger">Confirm Rejection</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let currentProviderId = null;
+        let providers = [];
+
+        // Helper function to make authenticated API calls
+        async function callApi(endpoint, method = 'GET', data = null) {
+            const token = document.getElementById('token').value;
+            if (!token) {
+                alert('Please enter an admin JWT token first!');
+                throw new Error('JWT token is required');
+            }
+
+            const options = {
+                method,
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            };
+
+            if (data) {
+                options.body = JSON.stringify(data);
+            }
+
+            const response = await fetch(`http://localhost:5500/api/admin/${endpoint}`, options);
+            return await response.json();
+        }
+
+        // Load unverified providers
+        document.getElementById('loadProviders').addEventListener('click', async () => {
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('providerList').style.display = 'none';
+            document.getElementById('noProviders').style.display = 'none';
+            document.getElementById('providerCards').innerHTML = '';
+            
+            try {
+                const response = await callApi('providers/unverified');
+                
+                if (response.success && response.data && response.data.length > 0) {
+                    providers = response.data;
+                    renderProviders(providers);
+                    document.getElementById('providerList').style.display = 'block';
+                } else {
+                    document.getElementById('noProviders').style.display = 'block';
+                }
+            } catch (error) {
+                console.error('Error loading providers:', error);
+                alert('Error loading providers. Please check your token and try again.');
+            } finally {
+                document.getElementById('loading').style.display = 'none';
+            }
+        });
+
+        // Render provider cards
+        function renderProviders(providers) {
+            const container = document.getElementById('providerCards');
+            container.innerHTML = '';
+            
+            providers.forEach(provider => {
+                const card = document.createElement('div');
+                card.className = 'provider-card';
+                
+                // Provider basic info
+                let hasIdDocuments = provider.documents && provider.documents.length > 0;
+                
+                card.innerHTML = `
+                    <div class="provider-header">
+                        <h3>${provider.user.firstName} ${provider.user.lastName}</h3>
+                        <span>Registered: ${new Date(provider.user.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    <div class="provider-details">
+                        <div><strong>Email:</strong> ${provider.user.email}</div>
+                        <div><strong>Phone:</strong> ${provider.user.phone || 'Not provided'}</div>
+                        <div><strong>ID:</strong> ${provider.id}</div>
+                        <div><strong>User ID:</strong> ${provider.userId}</div>
+                    </div>
+                    ${hasIdDocuments ? `
+                        <div class="document-section">
+                            <h4>ID Documents (${provider.documents.length})</h4>
+                            <div>
+                                ${provider.documents.map(doc => `
+                                    <div>
+                                        <div><strong>${doc.title}</strong> (Uploaded: ${new Date(doc.uploadedAt).toLocaleDateString()})</div>
+                                        <a href="${doc.fileUrl}" target="_blank" class="document-link">View Document</a>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : '<div><em>No ID documents submitted</em></div>'}
+                    <div class="provider-actions">
+                        <button class="danger reject-btn" data-id="${provider.id}">Reject</button>
+                        <button class="primary verify-btn" data-id="${provider.id}">Verify</button>
+                    </div>
+                `;
+                
+                container.appendChild(card);
+            });
+            
+            // Add event listeners to buttons
+            document.querySelectorAll('.verify-btn').forEach(btn => {
+                btn.addEventListener('click', verifyProvider);
+            });
+            
+            document.querySelectorAll('.reject-btn').forEach(btn => {
+                btn.addEventListener('click', showRejectModal);
+            });
+        }
+
+        // Verify provider
+        async function verifyProvider(e) {
+            const providerId = e.target.getAttribute('data-id');
+            
+            try {
+                const response = await callApi('providers/verify', 'POST', { providerId });
+                
+                if (response.success) {
+                    alert('Provider has been verified successfully!');
+                    // Reload providers
+                    document.getElementById('loadProviders').click();
+                } else {
+                    alert(`Error: ${response.message || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Error verifying provider:', error);
+                alert('Error verifying provider. Please try again.');
+            }
+        }
+
+        // Show reject modal
+        function showRejectModal(e) {
+            currentProviderId = e.target.getAttribute('data-id');
+            document.getElementById('rejectReason').value = '';
+            document.getElementById('rejectModal').style.display = 'flex';
+        }
+
+        // Cancel reject
+        document.getElementById('cancelReject').addEventListener('click', () => {
+            document.getElementById('rejectModal').style.display = 'none';
+            currentProviderId = null;
+        });
+
+        // Confirm reject
+        document.getElementById('confirmReject').addEventListener('click', async () => {
+            const reason = document.getElementById('rejectReason').value.trim();
+            
+            if (!reason) {
+                alert('Please provide a reason for rejection');
+                return;
+            }
+            
+            try {
+                const response = await callApi('providers/reject', 'POST', { 
+                    providerId: currentProviderId,
+                    reason 
+                });
+                
+                if (response.success) {
+                    alert('Provider verification has been rejected.');
+                    document.getElementById('rejectModal').style.display = 'none';
+                    currentProviderId = null;
+                    
+                    // Reload providers
+                    document.getElementById('loadProviders').click();
+                } else {
+                    alert(`Error: ${response.message || 'Unknown error'}`);
+                }
+            } catch (error) {
+                console.error('Error rejecting provider:', error);
+                alert('Error rejecting provider. Please try again.');
+            }
+        });
+    </script>
+</body>
+</html> 

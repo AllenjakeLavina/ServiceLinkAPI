@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Provider API Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 20px; }
+        h1, h2 { color: #333; }
+        .card { border: 1px solid #ddd; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input, textarea, select { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
+        button { background: #4CAF50; color: white; border: none; padding: 10px 15px; cursor: pointer; border-radius: 4px; }
+        .response { margin-top: 15px; padding: 15px; background: #f5f5f5; border-radius: 5px; display: none; }
+        .tabs { display: flex; margin-bottom: 20px; }
+        .tab { padding: 10px 15px; cursor: pointer; border: 1px solid #ddd; border-radius: 5px 5px 0 0; margin-right: 5px; }
+        .tab.active { background: #f0f0f0; border-bottom: none; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+    </style>
+</head>
+<body>
+    <h1>Provider API Test Suite</h1>
+    
+    <div class="card">
+        <h2>Authentication</h2>
+        <div class="form-group">
+            <label for="token">JWT Token:</label>
+            <input type="text" id="token" name="token" placeholder="Enter your JWT token here">
+        </div>
+        <button id="getProfile">Get My Profile</button>
+        <div id="profileResponse" class="response">
+            <h3>Profile Data:</h3>
+            <pre id="profileData"></pre>
+        </div>
+    </div>
+
+    <div class="tabs">
+        <div class="tab active" data-tab="profile">Update Profile</div>
+        <div class="tab" data-tab="experience">Work Experience</div>
+        <div class="tab" data-tab="education">Education</div>
+        <div class="tab" data-tab="skill">Skills</div>
+        <div class="tab" data-tab="portfolio">Portfolio</div>
+        <div class="tab" data-tab="document">Documents</div>
+        <div class="tab" data-tab="service">Services</div>
+    </div>
+
+    <div id="profile" class="tab-content active card">
+        <h2>Update Provider Profile</h2>
+        <form id="profileForm">
+            <div class="form-group">
+                <label for="firstName">First Name:</label>
+                <input type="text" id="firstName" name="firstName">
+            </div>
+            <div class="form-group">
+                <label for="lastName">Last Name:</label>
+                <input type="text" id="lastName" name="lastName">
+            </div>
+            <div class="form-group">
+                <label for="phone">Phone:</label>
+                <input type="text" id="phone" name="phone">
+            </div>
+            <div class="form-group">
+                <label for="bio">Bio:</label>
+                <textarea id="bio" name="bio" rows="4"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="headline">Headline:</label>
+                <input type="text" id="headline" name="headline">
+            </div>
+            <div class="form-group">
+                <label for="hourlyRate">Hourly Rate ($):</label>
+                <input type="number" id="hourlyRate" name="hourlyRate" min="0" step="0.01">
+            </div>
+            <button type="submit">Update Profile</button>
+        </form>
+        <div id="profileUpdateResponse" class="response">
+            <h3>API Response:</h3>
+            <pre id="profileUpdateData"></pre>
+        </div>
+    </div>
+
+    <div id="experience" class="tab-content card">
+        <h2>Add Work Experience</h2>
+        <form id="experienceForm">
+            <div class="form-group">
+                <label for="company">Company:</label>
+                <input type="text" id="company" name="company" required>
+            </div>
+            <div class="form-group">
+                <label for="position">Position:</label>
+                <input type="text" id="position" name="position" required>
+            </div>
+            <div class="form-group">
+                <label for="startDate">Start Date:</label>
+                <input type="date" id="startDate" name="startDate" required>
+            </div>
+            <div class="form-group">
+                <label for="endDate">End Date:</label>
+                <input type="date" id="endDate" name="endDate">
+            </div>
+            <div class="form-group">
+                <label>Current Position:</label>
+                <label>
+                    <input type="checkbox" id="isCurrentPosition" name="isCurrentPosition">
+                    This is my current position
+                </label>
+            </div>
+            <div class="form-group">
+                <label for="workDescription">Description:</label>
+                <textarea id="workDescription" name="description" rows="4"></textarea>
+            </div>
+            <button type="submit">Add Experience</button>
+        </form>
+        <div id="experienceResponse" class="response">
+            <h3>API Response:</h3>
+            <pre id="experienceData"></pre>
+        </div>
+    </div>
+
+    <div id="education" class="tab-content card">
+        <h2>Add Education</h2>
+        <form id="educationForm">
+            <div class="form-group">
+                <label for="institution">Institution:</label>
+                <input type="text" id="institution" name="institution" required>
+            </div>
+            <div class="form-group">
+                <label for="degree">Degree:</label>
+                <input type="text" id="degree" name="degree" required>
+            </div>
+            <div class="form-group">
+                <label for="fieldOfStudy">Field of Study:</label>
+                <input type="text" id="fieldOfStudy" name="fieldOfStudy">
+            </div>
+            <div class="form-group">
+                <label for="eduStartDate">Start Date:</label>
+                <input type="date" id="eduStartDate" name="startDate" required>
+            </div>
+            <div class="form-group">
+                <label for="eduEndDate">End Date:</label>
+                <input type="date" id="eduEndDate" name="endDate">
+            </div>
+            <div class="form-group">
+                <label>Currently Studying:</label>
+                <label>
+                    <input type="checkbox" id="isCurrentlyStudying" name="isCurrentlyStudying">
+                    I am currently studying here
+                </label>
+            </div>
+            <button type="submit">Add Education</button>
+        </form>
+        <div id="educationResponse" class="response">
+            <h3>API Response:</h3>
+            <pre id="educationData"></pre>
+        </div>
+    </div>
+
+    <div id="skill" class="tab-content card">
+        <h2>Add Skill</h2>
+        <form id="skillForm">
+            <div class="form-group">
+                <label for="skillName">Skill Name:</label>
+                <input type="text" id="skillName" name="skillName" required>
+            </div>
+            <button type="submit">Add Skill</button>
+        </form>
+        <div id="skillResponse" class="response">
+            <h3>API Response:</h3>
+            <pre id="skillData"></pre>
+        </div>
+    </div>
+
+    <div id="portfolio" class="tab-content card">
+        <h2>Add Portfolio Item</h2>
+        <form id="portfolioForm">
+            <div class="form-group">
+                <label for="portfolioTitle">Title:</label>
+                <input type="text" id="portfolioTitle" name="title" required>
+            </div>
+            <div class="form-group">
+                <label for="portfolioDescription">Description:</label>
+                <textarea id="portfolioDescription" name="description" rows="4"></textarea>
+            </div>
+            <div class="form-group">
+                <label for="projectUrl">Project URL:</label>
+                <input type="url" id="projectUrl" name="projectUrl">
+            </div>
+            <div class="form-group">
+                <label for="portfolioFiles">Upload Files (max 5):</label>
+                <input type="file" id="portfolioFiles" name="files" multiple accept=".jpg,.jpeg,.png,.pdf,.doc,.docx">
+            </div>
+            <button type="submit">Add Portfolio Item</button>
+        </form>
+        <div id="portfolioResponse" class="response">
+            <h3>API Response:</h3>
+            <pre id="portfolioData"></pre>
+        </div>
+    </div>
+
+    <div id="document" class="tab-content card">
+        <h2>Add Document</h2>
+        <form id="documentForm">
+            <div class="form-group">
+                <label for="documentTitle">Title:</label>
+                <input type="text" id="documentTitle" name="title" required>
+            </div>
+            <div class="form-group">
+                <label for="documentType">Document Type:</label>
+                <select id="documentType" name="type" required>
+                    <option value="ID">ID</option>
+                    <option value="CERTIFICATE">Certificate</option>
+                    <option value="LICENSE">License</option>
+                    <option value="RESUME">Resume</option>
+                    <option value="OTHER">Other</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="documentFile">Upload File:</label>
+                <input type="file" id="documentFile" name="file" required accept=".pdf,.doc,.docx,.txt">
+            </div>
+            <button type="submit">Upload Document</button>
+        </form>
+        <div id="documentResponse" class="response">
+            <h3>API Response:</h3>
+            <pre id="documentData"></pre>
+        </div>
+    </div>
+
+    <div id="service" class="tab-content card">
+        <h2>Create Service</h2>
+        <div class="form-group">
+            <button id="getCategories">Get Categories</button>
+        </div>
+        <div id="categoriesResponse" class="response">
+            <h3>Categories:</h3>
+            <pre id="categoriesData"></pre>
+        </div>
+        <form id="serviceForm">
+            <div class="form-group">
+                <label for="serviceTitle">Title:</label>
+                <input type="text" id="serviceTitle" name="title" required>
+            </div>
+            <div class="form-group">
+                <label for="serviceDescription">Description:</label>
+                <textarea id="serviceDescription" name="description" rows="4" required></textarea>
+            </div>
+            <div class="form-group">
+                <label for="categoryId">Category:</label>
+                <select id="categoryId" name="categoryId" required>
+                    <option value="">Select a category</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="pricing">Price:</label>
+                <input type="number" id="pricing" name="pricing" min="0" step="0.01" required>
+            </div>
+            <div class="form-group">
+                <label for="pricingType">Pricing Type:</label>
+                <select id="pricingType" name="pricingType" required>
+                    <option value="HOURLY">Hourly</option>
+                    <option value="FIXED">Fixed</option>
+                    <option value="DAILY">Daily</option>
+                    <option value="SESSION">Per Session</option>
+                </select>
+            </div>
+            <button type="submit">Create Service</button>
+        </form>
+        <div id="serviceResponse" class="response">
+            <h3>API Response:</h3>
+            <pre id="serviceData"></pre>
+        </div>
+    </div>
+
+    <script>
+        // Tab functionality
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                // Remove active class from all tabs and content
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                // Add active class to clicked tab and corresponding content
+                tab.classList.add('active');
+                document.getElementById(tab.dataset.tab).classList.add('active');
+            });
+        });
+
+        // Helper function to make API calls
+        async function callApi(endpoint, method = 'GET', data = null) {
+            const token = document.getElementById('token').value;
+            if (!token) {
+                alert('Please enter a JWT token first!');
+                throw new Error('JWT token is required');
+            }
+
+            const options = {
+                method,
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            };
+
+            if (data) {
+                if (data instanceof FormData) {
+                    options.body = data;
+                } else {
+                    options.headers['Content-Type'] = 'application/json';
+                    options.body = JSON.stringify(data);
+                }
+            }
+
+            const response = await fetch(`http://localhost:5500/api/provider/${endpoint}`, options);
+            return await response.json();
+        }
+
+        // Get Profile
+        document.getElementById('getProfile').addEventListener('click', async () => {
+            try {
+                const response = await callApi('profile');
+                document.getElementById('profileData').textContent = JSON.stringify(response, null, 2);
+                document.getElementById('profileResponse').style.display = 'block';
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        });
+
+        // Update Profile
+        document.getElementById('profileForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = {
+                firstName: document.getElementById('firstName').value,
+                lastName: document.getElementById('lastName').value,
+                phone: document.getElementById('phone').value,
+                bio: document.getElementById('bio').value,
+                headline: document.getElementById('headline').value,
+                hourlyRate: document.getElementById('hourlyRate').value
+            };
+
+            // Remove empty fields
+            Object.keys(formData).forEach(key => {
+                if (!formData[key]) delete formData[key];
+            });
+
+            try {
+                const response = await callApi('profile', 'PATCH', formData);
+                document.getElementById('profileUpdateData').textContent = JSON.stringify(response, null, 2);
+                document.getElementById('profileUpdateResponse').style.display = 'block';
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        });
+
+        // Add Work Experience
+        document.getElementById('experienceForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = {
+                company: document.getElementById('company').value,
+                position: document.getElementById('position').value,
+                startDate: document.getElementById('startDate').value,
+                endDate: document.getElementById('endDate').value,
+                description: document.getElementById('workDescription').value,
+                isCurrentPosition: document.getElementById('isCurrentPosition').checked
+            };
+
+            if (formData.isCurrentPosition) {
+                formData.endDate = null;
+            }
+
+            try {
+                const response = await callApi('experience', 'POST', formData);
+                document.getElementById('experienceData').textContent = JSON.stringify(response, null, 2);
+                document.getElementById('experienceResponse').style.display = 'block';
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        });
+
+        // Add Education
+        document.getElementById('educationForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = {
+                institution: document.getElementById('institution').value,
+                degree: document.getElementById('degree').value,
+                fieldOfStudy: document.getElementById('fieldOfStudy').value,
+                startDate: document.getElementById('eduStartDate').value,
+                endDate: document.getElementById('eduEndDate').value,
+                isCurrentlyStudying: document.getElementById('isCurrentlyStudying').checked
+            };
+
+            if (formData.isCurrentlyStudying) {
+                formData.endDate = null;
+            }
+
+            try {
+                const response = await callApi('education', 'POST', formData);
+                document.getElementById('educationData').textContent = JSON.stringify(response, null, 2);
+                document.getElementById('educationResponse').style.display = 'block';
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        });
+
+        // Add Skill
+        document.getElementById('skillForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = {
+                skillName: document.getElementById('skillName').value
+            };
+
+            try {
+                const response = await callApi('skill', 'POST', formData);
+                document.getElementById('skillData').textContent = JSON.stringify(response, null, 2);
+                document.getElementById('skillResponse').style.display = 'block';
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        });
+
+        // Add Portfolio Item
+        document.getElementById('portfolioForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData();
+            formData.append('title', document.getElementById('portfolioTitle').value);
+            
+            if (document.getElementById('portfolioDescription').value) {
+                formData.append('description', document.getElementById('portfolioDescription').value);
+            }
+            
+            if (document.getElementById('projectUrl').value) {
+                formData.append('projectUrl', document.getElementById('projectUrl').value);
+            }
+            
+            const files = document.getElementById('portfolioFiles').files;
+            for (let i = 0; i < files.length; i++) {
+                formData.append('files', files[i]);
+            }
+
+            try {
+                const response = await callApi('portfolio/upload', 'POST', formData);
+                document.getElementById('portfolioData').textContent = JSON.stringify(response, null, 2);
+                document.getElementById('portfolioResponse').style.display = 'block';
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        });
+
+        // Add Document
+        document.getElementById('documentForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData();
+            formData.append('title', document.getElementById('documentTitle').value);
+            formData.append('type', document.getElementById('documentType').value);
+            
+            const file = document.getElementById('documentFile').files[0];
+            if (file) {
+                formData.append('file', file);
+            }
+
+            try {
+                const response = await callApi('document', 'POST', formData);
+                document.getElementById('documentData').textContent = JSON.stringify(response, null, 2);
+                document.getElementById('documentResponse').style.display = 'block';
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        });
+
+        // Get Categories
+        document.getElementById('getCategories').addEventListener('click', async () => {
+            try {
+                const response = await fetch('http://localhost:5500/api/provider/categories');
+                const data = await response.json();
+                document.getElementById('categoriesData').textContent = JSON.stringify(data, null, 2);
+                document.getElementById('categoriesResponse').style.display = 'block';
+                
+                // Populate category dropdown
+                const select = document.getElementById('categoryId');
+                select.innerHTML = '<option value="">Select a category</option>';
+                
+                // Check if data contains categories
+                if (data && data.data && Array.isArray(data.data)) {
+                    data.data.forEach(category => {
+                        const option = document.createElement('option');
+                        option.value = category.id;
+                        option.textContent = category.name;
+                        select.appendChild(option);
+                    });
+                } else {
+                    console.error('No categories found in response:', data);
+                }
+            } catch (error) {
+                console.error('Error fetching categories:', error);
+            }
+        });
+
+        // Create Service
+        document.getElementById('serviceForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = {
+                title: document.getElementById('serviceTitle').value,
+                description: document.getElementById('serviceDescription').value,
+                categoryId: document.getElementById('categoryId').value,
+                pricing: document.getElementById('pricing').value,
+                pricingType: document.getElementById('pricingType').value
+            };
+
+            try {
+                const response = await callApi('service', 'POST', formData);
+                document.getElementById('serviceData').textContent = JSON.stringify(response, null, 2);
+                document.getElementById('serviceResponse').style.display = 'block';
+            } catch (error) {
+                console.error('Error:', error);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Provider Registration</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; }
+        h1 { color: #333; }
+        .form-container { border: 1px solid #ddd; padding: 20px; border-radius: 5px; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; }
+        input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        .file-input { border: none; padding: 0; }
+        button { background: #4CAF50; color: white; border: none; padding: 10px 15px; cursor: pointer; border-radius: 4px; }
+        .response { margin-top: 20px; padding: 15px; background: #f5f5f5; border-radius: 5px; display: none; }
+    </style>
+</head>
+<body>
+    <h1>Provider Registration</h1>
+    
+    <div class="form-container">
+        <form id="registrationForm">
+            <div class="form-group">
+                <label for="email">Email:</label>
+                <input type="email" id="email" name="email" required>
+            </div>
+            <div class="form-group">
+                <label for="password">Password:</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <div class="form-group">
+                <label for="firstName">First Name:</label>
+                <input type="text" id="firstName" name="firstName" required>
+            </div>
+            <div class="form-group">
+                <label for="lastName">Last Name:</label>
+                <input type="text" id="lastName" name="lastName" required>
+            </div>
+            <div class="form-group">
+                <label for="phone">Phone Number:</label>
+                <input type="tel" id="phone" name="phone">
+            </div>
+            <div class="form-group">
+                <label for="idDocument">ID Document (required for verification):</label>
+                <input type="file" id="idDocument" name="idDocument" class="file-input" accept=".jpg,.jpeg,.png,.pdf" required>
+                <small>Please upload a government-issued ID document. This will be reviewed by our administrators.</small>
+            </div>
+            <button type="submit">Register</button>
+        </form>
+    </div>
+    
+    <div id="response" class="response">
+        <h3>Registration Response:</h3>
+        <pre id="responseData"></pre>
+    </div>
+
+    <script>
+        document.getElementById('registrationForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const firstName = document.getElementById('firstName').value;
+            const lastName = document.getElementById('lastName').value;
+            const phone = document.getElementById('phone').value;
+            const idDocument = document.getElementById('idDocument').files[0];
+            
+            if (!idDocument) {
+                alert('Please upload an ID document for verification');
+                return;
+            }
+            
+            // Create form data
+            const formData = new FormData();
+            formData.append('email', email);
+            formData.append('password', password);
+            formData.append('firstName', firstName);
+            formData.append('lastName', lastName);
+            if (phone) formData.append('phone', phone);
+            formData.append('idDocument', idDocument);
+            
+            try {
+                const response = await fetch('http://localhost:5500/api/provider/register', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const responseData = await response.json();
+                
+                // Display response
+                document.getElementById('responseData').textContent = JSON.stringify(responseData, null, 2);
+                document.getElementById('response').style.display = 'block';
+                
+                // Clear form if registration was successful
+                if (responseData.success) {
+                    document.getElementById('registrationForm').reset();
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                document.getElementById('responseData').textContent = JSON.stringify({ success: false, message: 'Network error occurred' }, null, 2);
+                document.getElementById('response').style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html> 

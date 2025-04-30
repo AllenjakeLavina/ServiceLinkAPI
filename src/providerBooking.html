@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Provider Booking Management</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        .container {
+            margin-bottom: 30px;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        h2 {
+            color: #555;
+            margin-top: 30px;
+        }
+        .card {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .card-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        .card-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        input[type="text"], input[type="number"], textarea {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button.secondary {
+            background-color: #f0ad4e;
+        }
+        button.secondary:hover {
+            background-color: #ec971f;
+        }
+        button.danger {
+            background-color: #d9534f;
+        }
+        button.danger:hover {
+            background-color: #c9302c;
+        }
+        .status {
+            font-weight: bold;
+            padding: 3px 8px;
+            border-radius: 3px;
+            display: inline-block;
+            font-size: 12px;
+        }
+        .status-pending {
+            background-color: #f0ad4e;
+            color: white;
+        }
+        .status-confirmed {
+            background-color: #5bc0de;
+            color: white;
+        }
+        .status-in-progress {
+            background-color: #428bca;
+            color: white;
+        }
+        .status-completed {
+            background-color: #5cb85c;
+            color: white;
+        }
+        .status-cancelled {
+            background-color: #d9534f;
+            color: white;
+        }
+        .token-input {
+            margin-bottom: 20px;
+        }
+        .section {
+            margin-bottom: 20px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+        #bookingDetails {
+            background-color: #f5f5f5;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            white-space: pre-wrap;
+        }
+        #errorContainer {
+            color: red;
+            margin-bottom: 20px;
+        }
+        .hidden {
+            display: none;
+        }
+        #tokenInfo {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1>Provider Booking Management</h1>
+    
+    <div class="section">
+        <h2>Authentication</h2>
+        <div class="token-input">
+            <label for="authToken">Authentication Token:</label>
+            <input type="text" id="authToken" placeholder="Enter your JWT token here">
+            <button onclick="setToken()">Set Token</button>
+            <div id="tokenInfo"></div>
+        </div>
+        <div id="errorContainer"></div>
+    </div>
+
+    <div class="section">
+        <h2>Your Bookings</h2>
+        <div>
+            <label for="statusFilter">Filter by status:</label>
+            <select id="statusFilter" onchange="getBookings()">
+                <option value="">All</option>
+                <option value="PENDING">Pending</option>
+                <option value="CONFIRMED">Confirmed</option>
+                <option value="IN_PROGRESS">In Progress</option>
+                <option value="COMPLETED">Completed</option>
+                <option value="CANCELLED">Cancelled</option>
+            </select>
+            <button onclick="getBookings()">Refresh Bookings</button>
+        </div>
+        <div id="bookingsList"></div>
+    </div>
+
+    <div id="bookingDetailsSection" class="section hidden">
+        <h2>Booking Details</h2>
+        <div id="bookingDetails"></div>
+        <div class="card-actions">
+            <button onclick="backToList()">Back to List</button>
+        </div>
+    </div>
+
+    <script>
+        let authToken = "";
+        
+        // Check for token in localStorage on page load
+        window.onload = function() {
+            const savedToken = localStorage.getItem('providerAuthToken');
+            if (savedToken) {
+                document.getElementById('authToken').value = savedToken;
+                authToken = savedToken;
+                getBookings();
+                showTokenInfo();
+            }
+        };
+
+        function setToken() {
+            authToken = document.getElementById('authToken').value.trim();
+            if (authToken) {
+                localStorage.setItem('providerAuthToken', authToken);
+                getBookings();
+                showTokenInfo();
+            } else {
+                showError("Please enter a valid token");
+            }
+        }
+
+        function showTokenInfo() {
+            try {
+                // Get the payload part of the JWT (second part)
+                const payload = authToken.split('.')[1];
+                // Decode the base64 string
+                const decodedPayload = atob(payload);
+                // Parse the JSON
+                const tokenData = JSON.parse(decodedPayload);
+                
+                // Display token info
+                document.getElementById('tokenInfo').innerHTML = `
+                    <strong>Token Info:</strong><br>
+                    User ID: ${tokenData.id}<br>
+                    Role: ${tokenData.role}<br>
+                    Expires: ${new Date(tokenData.exp * 1000).toLocaleString()}
+                `;
+            } catch (error) {
+                document.getElementById('tokenInfo').innerHTML = "Invalid token format";
+            }
+        }
+
+        function showError(message) {
+            const errorContainer = document.getElementById('errorContainer');
+            errorContainer.textContent = message;
+            errorContainer.scrollIntoView();
+        }
+
+        function clearError() {
+            document.getElementById('errorContainer').textContent = "";
+        }
+
+        async function getBookings() {
+            clearError();
+            if (!authToken) {
+                showError("Please set your authentication token first");
+                return;
+            }
+
+            try {
+                const status = document.getElementById('statusFilter').value;
+                const url = status ? 
+                    `/api/provider/bookings?status=${status}` : 
+                    '/api/provider/bookings';
+                
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.message || 'Failed to fetch bookings');
+                }
+
+                displayBookings(result.data);
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        function displayBookings(bookings) {
+            const bookingsList = document.getElementById('bookingsList');
+            bookingsList.innerHTML = '';
+
+            if (!bookings || bookings.length === 0) {
+                bookingsList.innerHTML = '<p>No bookings found.</p>';
+                return;
+            }
+
+            bookings.forEach(booking => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                
+                const statusClass = `status-${booking.status.toLowerCase()}`;
+                
+                card.innerHTML = `
+                    <div class="card-title">${booking.service.title}</div>
+                    <div>Client: ${booking.client.user.firstName} ${booking.client.user.lastName}</div>
+                    <div>Date: ${new Date(booking.startTime).toLocaleDateString()}</div>
+                    <div>Time: ${new Date(booking.startTime).toLocaleTimeString()}</div>
+                    <div>Status: <span class="status ${statusClass}">${booking.status}</span></div>
+                    <div class="card-actions">
+                        <button onclick="viewBookingDetails('${booking.id}')">View Details</button>
+                        ${getActionButtons(booking)}
+                    </div>
+                `;
+                bookingsList.appendChild(card);
+            });
+        }
+
+        function getActionButtons(booking) {
+            // Determine which action buttons to show based on booking status
+            let buttons = '';
+            
+            switch (booking.status) {
+                case 'PENDING':
+                    buttons = `
+                        <button class="secondary" onclick="acceptBooking('${booking.id}')">Accept</button>
+                        <button class="danger" onclick="showDeclineForm('${booking.id}')">Decline</button>
+                    `;
+                    break;
+                case 'CONFIRMED':
+                    buttons = `
+                        <button class="secondary" onclick="startService('${booking.id}')">Start Service</button>
+                    `;
+                    break;
+                case 'IN_PROGRESS':
+                    buttons = `
+                        <button class="secondary" onclick="completeService('${booking.id}')">Complete Service</button>
+                    `;
+                    break;
+            }
+            
+            return buttons;
+        }
+
+        async function viewBookingDetails(bookingId) {
+            clearError();
+            if (!authToken) {
+                showError("Please set your authentication token first");
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/provider/bookings/${bookingId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.message || 'Failed to fetch booking details');
+                }
+
+                displayBookingDetails(result.data);
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        function displayBookingDetails(booking) {
+            const detailsSection = document.getElementById('bookingDetailsSection');
+            const detailsContainer = document.getElementById('bookingDetails');
+            
+            // Format and display booking details
+            const details = `
+                <h3>${booking.service.title}</h3>
+                <p><strong>Booking ID:</strong> ${booking.id}</p>
+                <p><strong>Status:</strong> ${booking.status}</p>
+                <p><strong>Client:</strong> ${booking.client.user.firstName} ${booking.client.user.lastName}</p>
+                <p><strong>Client Email:</strong> ${booking.client.user.email}</p>
+                <p><strong>Client Phone:</strong> ${booking.client.user.phone || 'Not provided'}</p>
+                <p><strong>Service Category:</strong> ${booking.service.category.name}</p>
+                <p><strong>Pricing:</strong> $${booking.service.pricing} (${booking.service.pricingType})</p>
+                <p><strong>Start Time:</strong> ${new Date(booking.startTime).toLocaleString()}</p>
+                <p><strong>End Time:</strong> ${booking.endTime ? new Date(booking.endTime).toLocaleString() : 'Not completed'}</p>
+                <p><strong>Total Hours:</strong> ${booking.totalHours || 'Not calculated yet'}</p>
+                <p><strong>Total Amount:</strong> ${booking.totalAmount ? '$' + booking.totalAmount : 'Not calculated yet'}</p>
+                
+                <h4>Address</h4>
+                <p>${booking.address.street}, ${booking.address.city}, ${booking.address.state} ${booking.address.postalCode}</p>
+                
+                <h4>Notes</h4>
+                <p>${booking.notes || 'No notes provided'}</p>
+                
+                <div class="card-actions">
+                    ${getActionButtons(booking)}
+                </div>
+            `;
+            
+            detailsContainer.innerHTML = details;
+            detailsSection.classList.remove('hidden');
+            
+            // Hide the bookings list
+            document.getElementById('bookingsList').parentElement.classList.add('hidden');
+        }
+
+        function backToList() {
+            // Hide details section
+            document.getElementById('bookingDetailsSection').classList.add('hidden');
+            // Show bookings list
+            document.getElementById('bookingsList').parentElement.classList.remove('hidden');
+        }
+
+        async function acceptBooking(bookingId) {
+            clearError();
+            if (!authToken) {
+                showError("Please set your authentication token first");
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/provider/bookings/${bookingId}/accept`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.message || 'Failed to accept booking');
+                }
+
+                // Refresh bookings list
+                getBookings();
+                // If we're in details view, refresh it
+                if (!document.getElementById('bookingDetailsSection').classList.contains('hidden')) {
+                    viewBookingDetails(bookingId);
+                }
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        function showDeclineForm(bookingId) {
+            // Create a simple form to enter decline reason
+            const reason = prompt("Enter reason for declining (optional):");
+            if (reason !== null) { // null means user canceled the prompt
+                declineBooking(bookingId, reason);
+            }
+        }
+
+        async function declineBooking(bookingId, reason) {
+            clearError();
+            if (!authToken) {
+                showError("Please set your authentication token first");
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/provider/bookings/${bookingId}/decline`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ reason })
+                });
+
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.message || 'Failed to decline booking');
+                }
+
+                // Refresh bookings list
+                getBookings();
+                // If we're in details view, go back to list
+                if (!document.getElementById('bookingDetailsSection').classList.contains('hidden')) {
+                    backToList();
+                }
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        async function startService(bookingId) {
+            clearError();
+            if (!authToken) {
+                showError("Please set your authentication token first");
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/provider/bookings/${bookingId}/start`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.message || 'Failed to start service');
+                }
+
+                // Refresh bookings list
+                getBookings();
+                // If we're in details view, refresh it
+                if (!document.getElementById('bookingDetailsSection').classList.contains('hidden')) {
+                    viewBookingDetails(bookingId);
+                }
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        async function completeService(bookingId) {
+            clearError();
+            if (!authToken) {
+                showError("Please set your authentication token first");
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/provider/bookings/${bookingId}/complete`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.message || 'Failed to complete service');
+                }
+
+                // Refresh bookings list
+                getBookings();
+                // If we're in details view, refresh it
+                if (!document.getElementById('bookingDetailsSection').classList.contains('hidden')) {
+                    viewBookingDetails(bookingId);
+                }
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+    </script>
+</body>
+</html>

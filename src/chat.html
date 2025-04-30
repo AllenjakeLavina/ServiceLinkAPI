@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat with Images - Test Page</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f5f5f5;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+    .login-box, .conversations-box, .chat-box {
+      background-color: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    input, button, textarea {
+      padding: 10px;
+      margin: 5px 0;
+      border-radius: 4px;
+      border: 1px solid #ddd;
+    }
+    input, textarea {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    button {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+      font-weight: bold;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    .conversations-list, .messages-list {
+      margin-top: 15px;
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid #eee;
+      padding: 10px;
+      border-radius: 4px;
+    }
+    .conversation-item, .message-item {
+      padding: 10px;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+    }
+    .conversation-item:hover {
+      background-color: #f9f9f9;
+    }
+    .conversation-item.active {
+      background-color: #e9f7ef;
+    }
+    .message-item {
+      border-radius: 8px;
+      margin-bottom: 10px;
+      max-width: 80%;
+      position: relative;
+    }
+    .message-sent {
+      background-color: #dcf8c6;
+      margin-left: auto;
+    }
+    .message-received {
+      background-color: #f0f0f0;
+      margin-right: auto;
+    }
+    .message-info {
+      font-size: 12px;
+      color: #777;
+      margin-top: 5px;
+    }
+    .message-content {
+      word-wrap: break-word;
+    }
+    .message-image {
+      max-width: 100%;
+      max-height: 300px;
+      border-radius: 4px;
+      margin-top: 5px;
+      cursor: pointer;
+    }
+    .message-form {
+      display: flex;
+      margin-top: 15px;
+    }
+    .message-input {
+      flex-grow: 1;
+      margin-right: 10px;
+    }
+    .file-input {
+      display: none;
+    }
+    .file-label {
+      padding: 10px;
+      background-color: #f1f1f1;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 10px;
+      display: inline-block;
+    }
+    .image-preview {
+      max-width: 100px;
+      max-height: 100px;
+      margin: 10px 0;
+      display: none;
+      border-radius: 4px;
+    }
+    .hide {
+      display: none;
+    }
+    .show {
+      display: block;
+    }
+    .flex {
+      display: flex;
+    }
+    .chat-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 15px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid #eee;
+    }
+    .chat-header img {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      margin-right: 10px;
+    }
+    .header-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    .logout-btn {
+      background-color: #f44336;
+      margin-left: auto;
+    }
+    .logout-btn:hover {
+      background-color: #d32f2f;
+    }
+    .refresh-btn {
+      background-color: #2196F3;
+      margin-right: 10px;
+    }
+    .refresh-btn:hover {
+      background-color: #0b7dda;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Chat with Images - Test Page</h1>
+    
+    <!-- Login Section -->
+    <div id="login-section" class="login-box">
+      <h2>Login</h2>
+      <input type="email" id="email" placeholder="Email" value="test@example.com" />
+      <input type="password" id="password" placeholder="Password" value="password123" />
+      <button id="login-btn">Login</button>
+      <div id="login-message"></div>
+    </div>
+    
+    <!-- Conversations Section -->
+    <div id="conversations-section" class="conversations-box hide">
+      <div class="header-actions">
+        <h2>Your Conversations</h2>
+        <div>
+          <button id="refresh-btn" class="refresh-btn">🔄 Refresh</button>
+          <button id="logout-btn" class="logout-btn">Logout</button>
+        </div>
+      </div>
+      <div id="conversations-list" class="conversations-list">
+        <!-- Conversations will be populated here -->
+      </div>
+    </div>
+    
+    <!-- Chat Section -->
+    <div id="chat-section" class="chat-box hide">
+      <div id="chat-header" class="chat-header">
+        <!-- Chat header will be populated here -->
+      </div>
+      
+      <div id="messages-list" class="messages-list">
+        <!-- Messages will be populated here -->
+      </div>
+      
+      <div id="image-preview-container">
+        <img id="image-preview" class="image-preview" src="" alt="Preview" />
+        <button id="remove-image-btn" class="hide">Remove Image</button>
+      </div>
+      
+      <div class="message-form">
+        <textarea id="message-input" class="message-input" placeholder="Type a message..." rows="2"></textarea>
+        <label for="file-input" class="file-label">📷</label>
+        <input type="file" id="file-input" class="file-input" accept="image/*" />
+        <button id="send-btn">Send</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Global variables
+    let token = '';
+    let userId = '';
+    let currentConversationId = '';
+    let selectedImageFile = null;
+    let selectedImageUrl = null;
+    const apiBaseUrl = '/api'; // Assuming the API is hosted on the same domain
+    
+    // DOM elements
+    const loginSection = document.getElementById('login-section');
+    const conversationsSection = document.getElementById('conversations-section');
+    const chatSection = document.getElementById('chat-section');
+    const loginBtn = document.getElementById('login-btn');
+    const logoutBtn = document.getElementById('logout-btn');
+    const refreshBtn = document.getElementById('refresh-btn');
+    const loginMessage = document.getElementById('login-message');
+    const conversationsList = document.getElementById('conversations-list');
+    const messagesList = document.getElementById('messages-list');
+    const messageInput = document.getElementById('message-input');
+    const fileInput = document.getElementById('file-input');
+    const imagePreview = document.getElementById('image-preview');
+    const removeImageBtn = document.getElementById('remove-image-btn');
+    const sendBtn = document.getElementById('send-btn');
+    const chatHeader = document.getElementById('chat-header');
+    
+    // Event Listeners
+    loginBtn.addEventListener('click', handleLogin);
+    logoutBtn.addEventListener('click', handleLogout);
+    refreshBtn.addEventListener('click', fetchConversations);
+    fileInput.addEventListener('change', handleFileSelect);
+    removeImageBtn.addEventListener('click', clearImageSelection);
+    sendBtn.addEventListener('click', sendMessage);
+    messageInput.addEventListener('keypress', function(e) {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    // Check if already logged in (token in localStorage)
+    window.addEventListener('DOMContentLoaded', checkAuthStatus);
+
+    function checkAuthStatus() {
+      const savedToken = localStorage.getItem('chatToken');
+      const savedUserId = localStorage.getItem('chatUserId');
+      
+      if (savedToken && savedUserId) {
+        token = savedToken;
+        userId = savedUserId;
+        showLoggedInState();
+        fetchConversations();
+      }
+    }
+
+    function handleLogout() {
+      // Clear token and user ID
+      token = '';
+      userId = '';
+      localStorage.removeItem('chatToken');
+      localStorage.removeItem('chatUserId');
+      
+      // Reset UI state
+      currentConversationId = '';
+      selectedImageFile = null;
+      selectedImageUrl = null;
+      
+      // Reset form elements
+      messageInput.value = '';
+      fileInput.value = '';
+      imagePreview.src = '';
+      imagePreview.style.display = 'none';
+      removeImageBtn.classList.add('hide');
+      
+      // Show login screen
+      loginSection.classList.remove('hide');
+      conversationsSection.classList.add('hide');
+      chatSection.classList.add('hide');
+      
+      // Show logout confirmation
+      loginMessage.textContent = 'You have been logged out successfully';
+      loginMessage.style.color = 'green';
+    }
+
+    async function handleLogin() {
+      const email = document.getElementById('email').value;
+      const password = document.getElementById('password').value;
+      
+      if (!email || !password) {
+        showLoginMessage('Email and password are required', 'error');
+        return;
+      }
+      
+      try {
+        const response = await fetch(`${apiBaseUrl}/login`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ email, password })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          token = data.data.token;
+          userId = data.data.user.id;
+          
+          // Save to localStorage
+          localStorage.setItem('chatToken', token);
+          localStorage.setItem('chatUserId', userId);
+          
+          showLoggedInState();
+          fetchConversations();
+        } else {
+          showLoginMessage(data.message || 'Login failed', 'error');
+        }
+      } catch (error) {
+        showLoginMessage('Failed to connect to server', 'error');
+        console.error('Login error:', error);
+      }
+    }
+
+    function showLoginMessage(message, type = 'info') {
+      loginMessage.textContent = message;
+      loginMessage.style.color = type === 'error' ? 'red' : 'green';
+    }
+
+    function showLoggedInState() {
+      loginSection.classList.add('hide');
+      conversationsSection.classList.remove('hide');
+    }
+
+    async function fetchConversations() {
+      try {
+        const response = await fetch(`${apiBaseUrl}/conversations`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          renderConversations(data.data);
+        } else {
+          console.error('Failed to fetch conversations:', data.message);
+        }
+      } catch (error) {
+        console.error('Error fetching conversations:', error);
+      }
+    }
+
+    function renderConversations(conversations) {
+      conversationsList.innerHTML = '';
+      
+      if (conversations.length === 0) {
+        conversationsList.innerHTML = '<div class="conversation-item">No conversations yet</div>';
+        return;
+      }
+      
+      conversations.forEach(conversation => {
+        const conversationEl = document.createElement('div');
+        conversationEl.classList.add('conversation-item');
+        conversationEl.dataset.id = conversation.id;
+        
+        // Display unread count if any
+        const unreadBadge = conversation.unreadCount > 0 
+          ? `<span style="background-color: #4CAF50; color: white; padding: 2px 6px; border-radius: 10px; font-size: 12px; margin-left: 5px;">${conversation.unreadCount}</span>` 
+          : '';
+        
+        // Format the last message preview
+        let lastMessagePreview = 'No messages yet';
+        if (conversation.lastMessage) {
+          lastMessagePreview = conversation.lastMessage.length > 30 
+            ? conversation.lastMessage.substring(0, 30) + '...' 
+            : conversation.lastMessage;
+        } else if (conversation.lastMessageImageUrl) {
+          lastMessagePreview = '📷 Image';
+        }
+        
+        // Format the timestamp
+        let timeDisplay = '';
+        if (conversation.lastMessageTime) {
+          const date = new Date(conversation.lastMessageTime);
+          timeDisplay = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+        
+        conversationEl.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <strong>${conversation.otherUser.firstName} ${conversation.otherUser.lastName}</strong>
+              ${unreadBadge}
+            </div>
+            <small style="color: #777;">${timeDisplay}</small>
+          </div>
+          <div style="color: #777; font-size: 14px; margin-top: 5px;">${lastMessagePreview}</div>
+        `;
+        
+        conversationEl.addEventListener('click', () => {
+          document.querySelectorAll('.conversation-item').forEach(el => {
+            el.classList.remove('active');
+          });
+          conversationEl.classList.add('active');
+          openConversation(conversation);
+        });
+        
+        conversationsList.appendChild(conversationEl);
+      });
+    }
+
+    function openConversation(conversation) {
+      currentConversationId = conversation.id;
+      chatSection.classList.remove('hide');
+      
+      // Update chat header
+      chatHeader.innerHTML = `
+        <img src="${conversation.otherUser.profilePicture || 'https://via.placeholder.com/40'}" alt="Profile">
+        <div>
+          <strong>${conversation.otherUser.firstName} ${conversation.otherUser.lastName}</strong>
+          ${conversation.booking ? `<div style="font-size: 12px; color: #777;">Booking: ${conversation.booking.title}</div>` : ''}
+        </div>
+      `;
+      
+      fetchMessages(conversation.id);
+    }
+
+    async function fetchMessages(conversationId) {
+      try {
+        const response = await fetch(`${apiBaseUrl}/conversations/${conversationId}/messages`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          renderMessages(data.data);
+        } else {
+          console.error('Failed to fetch messages:', data.message);
+        }
+      } catch (error) {
+        console.error('Error fetching messages:', error);
+      }
+    }
+
+    function renderMessages(messages) {
+      messagesList.innerHTML = '';
+      
+      if (messages.length === 0) {
+        messagesList.innerHTML = '<div style="text-align: center; color: #777; padding: 20px;">No messages yet</div>';
+        return;
+      }
+      
+      messages.forEach(message => {
+        const messageEl = document.createElement('div');
+        messageEl.classList.add('message-item');
+        messageEl.classList.add(message.sender.id === userId ? 'message-sent' : 'message-received');
+        
+        let contentHtml = '';
+        
+        // Add text content if present
+        if (message.content) {
+          contentHtml += `<div class="message-content">${message.content}</div>`;
+        }
+        
+        // Add image if present
+        if (message.imageUrl) {
+          contentHtml += `<img src="${message.imageUrl}" alt="Message Image" class="message-image" onclick="openImageInNewTab('${message.imageUrl}')">`;
+        }
+        
+        // Format the timestamp
+        const date = new Date(message.createdAt);
+        const timeDisplay = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        messageEl.innerHTML = `
+          ${contentHtml}
+          <div class="message-info">
+            ${timeDisplay} ${message.isRead ? '✓✓' : '✓'}
+          </div>
+        `;
+        
+        messagesList.appendChild(messageEl);
+      });
+      
+      // Scroll to bottom
+      messagesList.scrollTop = messagesList.scrollHeight;
+    }
+
+    // Function to open image in new tab
+    window.openImageInNewTab = function(url) {
+      window.open(url, '_blank');
+    };
+
+    function handleFileSelect(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      
+      // Check if file is an image
+      if (!file.type.startsWith('image/')) {
+        alert('Please select an image file');
+        return;
+      }
+      
+      // Check file size (limit to 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        alert('Image size should be less than 5MB');
+        return;
+      }
+      
+      selectedImageFile = file;
+      
+      // Show image preview
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        imagePreview.src = e.target.result;
+        imagePreview.style.display = 'block';
+        removeImageBtn.classList.remove('hide');
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function clearImageSelection() {
+      selectedImageFile = null;
+      selectedImageUrl = null;
+      imagePreview.src = '';
+      imagePreview.style.display = 'none';
+      removeImageBtn.classList.add('hide');
+      fileInput.value = '';
+    }
+
+    async function uploadImage() {
+      if (!selectedImageFile) return null;
+      
+      // Create a FormData object to send the file
+      const formData = new FormData();
+      formData.append('image', selectedImageFile);
+      
+      try {
+        // This endpoint is now properly set up on the server
+        const response = await fetch(`${apiBaseUrl}/upload-image`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          // Do not set Content-Type header as the browser will set it with the boundary for multipart/form-data
+          body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          return data.imageUrl;
+        } else {
+          throw new Error(data.message || 'Failed to upload image');
+        }
+      } catch (error) {
+        console.error('Error uploading image:', error);
+        alert('Failed to upload image: ' + error.message);
+        return null;
+      }
+    }
+
+    async function sendMessage() {
+      if (!currentConversationId) return;
+      
+      const content = messageInput.value.trim();
+      
+      // Check if there's either text content or an image
+      if (!content && !selectedImageFile && !selectedImageUrl) {
+        alert('Please enter a message or select an image');
+        return;
+      }
+      
+      let imageUrl = selectedImageUrl;
+      
+      // If we have a file but no URL yet, upload it
+      if (selectedImageFile && !selectedImageUrl) {
+        imageUrl = await uploadImage();
+        if (!imageUrl && !content) {
+          // If upload failed and there's no text content, don't send the message
+          return;
+        }
+      }
+      
+      try {
+        const response = await fetch(`${apiBaseUrl}/conversations/${currentConversationId}/messages`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            content,
+            imageUrl
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          // Clear input and image selection
+          messageInput.value = '';
+          clearImageSelection();
+          
+          // Append the new message to the list
+          const messages = [data.data];
+          renderMessages([...Array.from(messagesList.querySelectorAll('.message-item')).map(extractMessageData), ...messages]);
+          
+          // Update the conversation list to reflect the new message
+          fetchConversations();
+        } else {
+          console.error('Failed to send message:', data.message);
+          alert('Failed to send message: ' + data.message);
+        }
+      } catch (error) {
+        console.error('Error sending message:', error);
+        alert('Error sending message: ' + error.message);
+      }
+    }
+
+    // Helper function to extract message data from DOM elements
+    function extractMessageData(element) {
+      const isSent = element.classList.contains('message-sent');
+      const content = element.querySelector('.message-content')?.textContent || '';
+      const imageUrl = element.querySelector('.message-image')?.src || null;
+      const timeText = element.querySelector('.message-info')?.textContent.trim() || '';
+      const isRead = timeText.includes('✓✓');
+      
+      return {
+        content,
+        imageUrl,
+        isRead,
+        sender: {
+          id: isSent ? userId : 'other'
+        },
+        createdAt: new Date().toISOString() // Approximation
+      };
+    }
+
+    // For testing: simulate image URL for development if no upload endpoint is available
+    window.simulateImageUpload = function() {
+      selectedImageUrl = prompt('Enter image URL for testing:');
+      if (selectedImageUrl) {
+        imagePreview.src = selectedImageUrl;
+        imagePreview.style.display = 'block';
+        removeImageBtn.classList.remove('hide');
+      }
+    };
+  </script>
+</body>
+</html>

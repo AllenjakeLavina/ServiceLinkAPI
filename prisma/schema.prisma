@@ -32,9 +32,11 @@ model User {
   // Notifications
   receivedNotifications Notification[] @relation("ReceivedNotifications")
   
-  // Messages
+  // Messages and Conversations
   sentMessages     Message[]      @relation("SentMessages")
   receivedMessages Message[]      @relation("ReceivedMessages")
+  conversationsAsUser1 Conversation[] @relation("ConversationUser1")
+  conversationsAsUser2 Conversation[] @relation("ConversationUser2")
   
   // Reviews
   givenReviews     Review[]       @relation("ReviewGiver")
@@ -67,6 +69,7 @@ model ServiceProvider {
   rating          Float?           @default(0)
   services        Service[]
   availability    Availability[]
+  isProviderVerified Boolean       @default(false)
   
   // Location tracking
   currentLocation Location?
@@ -135,9 +138,20 @@ model Portfolio {
   serviceProvider   ServiceProvider @relation(fields: [serviceProviderId], references: [id], onDelete: Cascade)
   title             String
   description       String?        @db.Text
-  imageUrls         String?        @db.Text // Store as JSON string of URLs
   projectUrl        String?
   createdAt         DateTime       @default(now())
+  files             PortfolioFile[]
+}
+
+// Portfolio files model for storing individual files
+model PortfolioFile {
+  id           String    @id @default(uuid())
+  portfolioId  String
+  portfolio    Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  fileUrl      String
+  fileName     String?
+  fileType     String?
+  uploadedAt   DateTime  @default(now())
 }
 
 // Documents for service providers (e.g., certifications, ID, etc.)
@@ -298,9 +312,9 @@ model ServiceBooking {
   // Timer records for this booking
   timeRecords       TimeRecord[]
   
-  // Messages related to this booking
-  chatRoom          ChatRoom?
-
+  // Messages related to this booking - conversation replaces chatRoom
+  conversation      Conversation?
+  
   // Contract related to this booking
   contract          Contract?
 }
@@ -330,28 +344,35 @@ model TimeRecord {
   longitude        Float?
 }
 
-// Chat room for a service booking
-model ChatRoom {
-  id               String        @id @default(uuid())
-  serviceBookingId String        @unique
-  serviceBooking   ServiceBooking @relation(fields: [serviceBookingId], references: [id], onDelete: Cascade)
-  messages         Message[]
-  createdAt        DateTime      @default(now())
+// Conversation model for chats between users
+model Conversation {
+  id                String         @id @default(uuid())
+  user1Id           String
+  user1             User           @relation("ConversationUser1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2Id           String
+  user2             User           @relation("ConversationUser2", fields: [user2Id], references: [id], onDelete: Cascade)
+  serviceBookingId  String?        @unique  // Make this unique for one-to-one relation
+  serviceBooking    ServiceBooking? @relation(fields: [serviceBookingId], references: [id])
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  messages          Message[]
+
+  @@unique([user1Id, user2Id])
 }
 
-// Messages within a chat room
+// Update the Message model to reference the Conversation
 model Message {
-  id           String    @id @default(uuid())
-  chatRoomId   String
-  chatRoom     ChatRoom  @relation(fields: [chatRoomId], references: [id], onDelete: Cascade)
-  senderId     String
-  sender       User      @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  receiverId   String
-  receiver     User      @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
-  content      String    @db.Text
-  attachments  String?   @db.Text // Store as JSON string of URLs
-  isRead       Boolean   @default(false)
-  createdAt    DateTime  @default(now())
+  id               String        @id @default(uuid())
+  conversationId   String
+  conversation     Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId         String
+  sender           User          @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId       String
+  receiver         User          @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  content          String        @db.Text
+  imageUrl         String?       // Optional field for image attachment URL
+  createdAt        DateTime      @default(now())
+  isRead           Boolean       @default(false)
 }
 
 // Payment model

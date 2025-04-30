@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client Address Management</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        h2 {
+            color: #555;
+            margin-top: 30px;
+        }
+        .card {
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        form {
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], 
+        input[type="number"], 
+        input[type="email"], 
+        select, 
+        textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button.secondary {
+            background-color: #2196F3;
+        }
+        button.secondary:hover {
+            background-color: #0b7dda;
+        }
+        button.danger {
+            background-color: #f44336;
+        }
+        button.danger:hover {
+            background-color: #d32f2f;
+        }
+        .address-actions {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+        .token-input {
+            margin-bottom: 20px;
+        }
+        .section {
+            margin-bottom: 20px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+        }
+        #errorContainer {
+            color: red;
+            margin-bottom: 20px;
+        }
+        #successMessage {
+            color: green;
+            margin-bottom: 20px;
+        }
+        #tokenInfo {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #666;
+        }
+        .address-type {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            background-color: #e0e0e0;
+            margin-right: 5px;
+        }
+        .address-type.home {
+            background-color: #c8e6c9;
+        }
+        .address-type.work {
+            background-color: #bbdefb;
+        }
+        .address-type.other {
+            background-color: #ffecb3;
+        }
+        .default-badge {
+            background-color: #673ab7;
+            color: white;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 11px;
+            margin-left: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Client Address Management</h1>
+
+    <div class="section">
+        <h2>Authentication</h2>
+        <div class="token-input">
+            <label for="authToken">Authentication Token:</label>
+            <input type="text" id="authToken" placeholder="Enter your JWT token here">
+            <button onclick="setToken()">Set Token</button>
+            <div id="tokenInfo"></div>
+        </div>
+        <div id="errorContainer"></div>
+        <div id="successMessage"></div>
+    </div>
+
+    <div class="section">
+        <h2>Add New Address</h2>
+        <form id="addressForm">
+            <div class="form-group">
+                <label for="addressName">Address Name:</label>
+                <input type="text" id="addressName" placeholder="E.g., Home, Work, etc." required>
+            </div>
+            <div class="form-group">
+                <label for="addressType">Address Type:</label>
+                <select id="addressType" required>
+                    <option value="HOME">Home</option>
+                    <option value="WORK">Work</option>
+                    <option value="OTHER">Other</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="street">Street Address:</label>
+                <input type="text" id="street" placeholder="Street address" required>
+            </div>
+            <div class="form-group">
+                <label for="unit">Apartment/Unit (optional):</label>
+                <input type="text" id="unit" placeholder="Apt, Suite, Unit, etc.">
+            </div>
+            <div class="form-group">
+                <label for="city">City:</label>
+                <input type="text" id="city" placeholder="City" required>
+            </div>
+            <div class="form-group">
+                <label for="state">State/Province:</label>
+                <input type="text" id="state" placeholder="State or Province" required>
+            </div>
+            <div class="form-group">
+                <label for="postalCode">Postal Code:</label>
+                <input type="text" id="postalCode" placeholder="Postal Code" required>
+            </div>
+            <div class="form-group">
+                <label for="country">Country:</label>
+                <input type="text" id="country" placeholder="Country" required value="United States">
+            </div>
+            <div class="form-group">
+                <label for="isDefault">
+                    <input type="checkbox" id="isDefault"> Set as default address
+                </label>
+            </div>
+            <div class="form-group">
+                <label for="notes">Additional Notes (optional):</label>
+                <textarea id="notes" rows="3" placeholder="Delivery instructions, landmarks, etc."></textarea>
+            </div>
+            <button type="button" onclick="saveAddress()">Save Address</button>
+        </form>
+    </div>
+
+    <div class="section">
+        <h2>Your Addresses</h2>
+        <button onclick="getAddresses()">Refresh Addresses</button>
+        <div id="addressesList"></div>
+    </div>
+
+    <script>
+        let authToken = "";
+        let editingAddressId = null;
+        
+        // Check for token in localStorage on page load
+        window.onload = function() {
+            const savedToken = localStorage.getItem('clientAuthToken');
+            if (savedToken) {
+                document.getElementById('authToken').value = savedToken;
+                authToken = savedToken;
+                showTokenInfo();
+                getAddresses();
+            }
+        };
+
+        function setToken() {
+            authToken = document.getElementById('authToken').value.trim();
+            if (authToken) {
+                localStorage.setItem('clientAuthToken', authToken);
+                showTokenInfo();
+                getAddresses();
+            } else {
+                showError("Please enter a valid token");
+            }
+        }
+
+        function showTokenInfo() {
+            try {
+                // Get the payload part of the JWT (second part)
+                const payload = authToken.split('.')[1];
+                // Decode the base64 string
+                const decodedPayload = atob(payload);
+                // Parse the JSON
+                const tokenData = JSON.parse(decodedPayload);
+                
+                // Display token info
+                document.getElementById('tokenInfo').innerHTML = `
+                    <strong>Token Info:</strong><br>
+                    User ID: ${tokenData.id}<br>
+                    Role: ${tokenData.role}<br>
+                    Expires: ${new Date(tokenData.exp * 1000).toLocaleString()}
+                `;
+            } catch (error) {
+                document.getElementById('tokenInfo').innerHTML = "Invalid token format";
+            }
+        }
+
+        function showError(message) {
+            const errorContainer = document.getElementById('errorContainer');
+            errorContainer.textContent = message;
+            errorContainer.scrollIntoView();
+            setTimeout(() => {
+                errorContainer.textContent = "";
+            }, 5000);
+        }
+
+        function showSuccess(message) {
+            const successMessage = document.getElementById('successMessage');
+            successMessage.textContent = message;
+            successMessage.scrollIntoView();
+            setTimeout(() => {
+                successMessage.textContent = "";
+            }, 5000);
+        }
+
+        async function getAddresses() {
+            if (!authToken) {
+                showError("Please set your authentication token first");
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/client/address', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.message || 'Failed to fetch addresses');
+                }
+
+                displayAddresses(result.data);
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        function displayAddresses(addresses) {
+            const addressesList = document.getElementById('addressesList');
+            addressesList.innerHTML = '';
+
+            if (!addresses || addresses.length === 0) {
+                addressesList.innerHTML = '<p>No addresses found. Add an address using the form above.</p>';
+                return;
+            }
+
+            addresses.forEach(address => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                
+                const addressTypeClass = address.type.toLowerCase();
+                
+                card.innerHTML = `
+                    <div>
+                        <span class="address-type ${addressTypeClass}">${address.type}</span>
+                        <strong>${address.name}</strong>
+                        ${address.isDefault ? '<span class="default-badge">Default</span>' : ''}
+                    </div>
+                    <div>${address.addressLine1}${address.addressLine2 ? ', ' + address.addressLine2 : ''}</div>
+                    <div>${address.city}, ${address.state} ${address.postalCode}</div>
+                    <div>${address.country}</div>
+                    ${address.notes ? `<div><em>Notes: ${address.notes}</em></div>` : ''}
+                    <div class="address-actions">
+                        <button class="secondary" onclick="editAddress('${address.id}')">Edit</button>
+                        ${!address.isDefault ? `<button class="secondary" onclick="setDefaultAddress('${address.id}')">Set Default</button>` : ''}
+                        ${!address.isDefault ? `<button class="danger" onclick="deleteAddress('${address.id}')">Delete</button>` : ''}
+                    </div>
+                `;
+                addressesList.appendChild(card);
+            });
+        }
+
+        async function saveAddress() {
+            if (!authToken) {
+                showError("Please set your authentication token first");
+                return;
+            }
+
+            // Get form values
+            const name = document.getElementById('addressName').value.trim();
+            const type = document.getElementById('addressType').value;
+            const street = document.getElementById('street').value.trim();
+            const unit = document.getElementById('unit').value.trim();
+            const city = document.getElementById('city').value.trim();
+            const state = document.getElementById('state').value.trim();
+            const postalCode = document.getElementById('postalCode').value.trim();
+            const country = document.getElementById('country').value.trim();
+            const isDefault = document.getElementById('isDefault').checked;
+            const notes = document.getElementById('notes').value.trim();
+
+            // Basic validation
+            if (!name || !street || !city || !state || !postalCode || !country) {
+                showError("Please fill in all required fields");
+                return;
+            }
+
+            // Prepare data - match field names with the backend API
+            const addressData = {
+                name,
+                type,
+                addressLine1: street,
+                addressLine2: unit || null,
+                city,
+                state,
+                postalCode,
+                country,
+                isDefault,
+                notes: notes || null
+            };
+
+            try {
+                // Determine if we're creating or updating
+                const method = editingAddressId ? 'PUT' : 'POST';
+                const url = editingAddressId ? 
+                    `/api/client/address/${editingAddressId}` : 
+                    '/api/client/address';
+
+                const response = await fetch(url, {
+                    method,
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(addressData)
+                });
+
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.message || 'Failed to save address');
+                }
+
+                // Clear form
+                document.getElementById('addressForm').reset();
+                
+                // Reset editing state
+                if (editingAddressId) {
+                    editingAddressId = null;
+                    document.querySelector('button[onclick="saveAddress()"]').textContent = 'Save Address';
+                }
+
+                // Show success message
+                showSuccess(editingAddressId ? 'Address updated successfully' : 'Address added successfully');
+                
+                // Refresh addresses
+                getAddresses();
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        async function editAddress(addressId) {
+            if (!authToken) {
+                showError("Please set your authentication token first");
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/client/address/${addressId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.message || 'Failed to fetch address details');
+                }
+
+                const address = result.data;
+                
+                // Populate form with address details
+                document.getElementById('addressName').value = address.name || '';
+                document.getElementById('addressType').value = address.type || 'HOME';
+                document.getElementById('street').value = address.addressLine1 || '';
+                document.getElementById('unit').value = address.addressLine2 || '';
+                document.getElementById('city').value = address.city || '';
+                document.getElementById('state').value = address.state || '';
+                document.getElementById('postalCode').value = address.postalCode || '';
+                document.getElementById('country').value = address.country || '';
+                document.getElementById('isDefault').checked = address.isDefault || false;
+                document.getElementById('notes').value = address.notes || '';
+                
+                // Change button text and set editing state
+                document.querySelector('button[onclick="saveAddress()"]').textContent = 'Update Address';
+                editingAddressId = addressId;
+                
+                // Scroll to form
+                document.getElementById('addressForm').scrollIntoView();
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        async function setDefaultAddress(addressId) {
+            if (!authToken) {
+                showError("Please set your authentication token first");
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/client/address/${addressId}/default`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.message || 'Failed to set default address');
+                }
+
+                showSuccess('Default address updated');
+                getAddresses();
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+
+        async function deleteAddress(addressId) {
+            if (!authToken) {
+                showError("Please set your authentication token first");
+                return;
+            }
+
+            // Confirm deletion
+            if (!confirm('Are you sure you want to delete this address?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/client/address/${addressId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(result.message || 'Failed to delete address');
+                }
+
+                showSuccess('Address deleted successfully');
+                getAddresses();
+            } catch (error) {
+                showError(error.message);
+            }
+        }
+    </script>
+</body>
+</html>

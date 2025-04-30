@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client Service Booking</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1, h2, h3 {
+            color: #333;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .left-panel {
+            flex: 1;
+            border-right: 1px solid #eee;
+            padding-right: 20px;
+        }
+        .right-panel {
+            flex: 1;
+            padding-left: 20px;
+        }
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .service-header {
+            display: flex;
+            justify-content: space-between;
+        }
+        .service-price {
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        input, select, button, textarea {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            cursor: pointer;
+            border: none;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .section {
+            background-color: #f9f9f9;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .booking-success {
+            background-color: #dff0d8;
+            color: #3c763d;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+            margin-top: 15px;
+        }
+        .booking-error {
+            background-color: #f2dede;
+            color: #a94442;
+            padding: 15px;
+            border-radius: 4px;
+            display: none;
+            margin-top: 15px;
+        }
+        .my-bookings {
+            margin-top: 30px;
+        }
+        .booking-item {
+            background-color: #f5f5f5;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+        }
+        .booking-status {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status-pending {
+            background-color: #fcf8e3;
+            color: #8a6d3b;
+        }
+        .status-confirmed {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .status-completed {
+            background-color: #d9edf7;
+            color: #31708f;
+        }
+        .status-cancelled {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <h1>Service Booking Portal</h1>
+    
+    <div id="auth-section" class="section">
+        <h2>Authentication</h2>
+        <div id="login-form">
+            <input type="email" id="email" placeholder="Email">
+            <input type="password" id="password" placeholder="Password">
+            <button id="login-btn">Login</button>
+            <button id="clear-token-btn" style="background-color: #f44336;">Clear Token</button>
+            
+            <hr style="margin: 15px 0;">
+            <h3>Direct Token Authentication</h3>
+            <input type="text" id="auth-token-input" placeholder="Paste JWT token here">
+            <button id="use-token-btn" style="background-color: #2196F3;">Use Token</button>
+        </div>
+        <p id="auth-message"></p>
+        <div id="user-info" class="hidden">
+            <p>Logged in as: <span id="user-name"></span></p>
+            <p>Token: <span id="current-token" style="font-size: 10px; word-break: break-all;"></span></p>
+            <button id="logout-btn">Logout</button>
+        </div>
+    </div>
+
+    <div id="main-content" class="hidden">
+        <div class="container">
+            <div class="left-panel">
+                <div class="section">
+                    <h2>Find Services</h2>
+                    <input type="text" id="search-input" placeholder="Search services...">
+                    <select id="category-filter">
+                        <option value="">All Categories</option>
+                    </select>
+                    <button id="search-btn">Search</button>
+                </div>
+                
+                <div id="services-list">
+                    <!-- Services will be loaded here -->
+                </div>
+            </div>
+            
+            <div class="right-panel">
+                <div id="service-details" class="section hidden">
+                    <h2 id="service-title"></h2>
+                    <p id="service-description"></p>
+                    <p>Category: <span id="service-category"></span></p>
+                    <p>Price: <span id="service-price"></span></p>
+                    <p>Provider: <span id="service-provider"></span></p>
+                    
+                    <h3>Book this Service</h3>
+                    <input type="datetime-local" id="booking-time">
+                    <select id="address-select">
+                        <option value="">Select Address</option>
+                    </select>
+                    <textarea id="booking-notes" placeholder="Additional notes"></textarea>
+                    <button id="book-btn">Book Service</button>
+                    
+                    <div id="booking-success" class="booking-success">
+                        Service booked successfully! The provider will be notified.
+                    </div>
+                    <div id="booking-error" class="booking-error">
+                        Error booking service. Please try again.
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="my-bookings section">
+            <h2>My Bookings</h2>
+            <select id="status-filter">
+                <option value="">All Bookings</option>
+                <option value="PENDING">Pending</option>
+                <option value="CONFIRMED">Confirmed</option>
+                <option value="IN_PROGRESS">In Progress</option>
+                <option value="COMPLETED">Completed</option>
+                <option value="CANCELLED">Cancelled</option>
+            </select>
+            <button id="refresh-bookings">Refresh</button>
+            
+            <div id="bookings-list">
+                <!-- Bookings will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let token = localStorage.getItem('token');
+        let currentService = null;
+        const API_URL = 'http://localhost:5500/api';
+
+        // DOM Elements
+        const authSection = document.getElementById('auth-section');
+        const loginForm = document.getElementById('login-form');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const loginBtn = document.getElementById('login-btn');
+        const clearTokenBtn = document.getElementById('clear-token-btn');
+        const authTokenInput = document.getElementById('auth-token-input');
+        const useTokenBtn = document.getElementById('use-token-btn');
+        const authMessage = document.getElementById('auth-message');
+        const userInfo = document.getElementById('user-info');
+        const userName = document.getElementById('user-name');
+        const currentToken = document.getElementById('current-token');
+        const logoutBtn = document.getElementById('logout-btn');
+        const mainContent = document.getElementById('main-content');
+        
+        const searchInput = document.getElementById('search-input');
+        const categoryFilter = document.getElementById('category-filter');
+        const searchBtn = document.getElementById('search-btn');
+        const servicesList = document.getElementById('services-list');
+        
+        const serviceDetails = document.getElementById('service-details');
+        const serviceTitle = document.getElementById('service-title');
+        const serviceDescription = document.getElementById('service-description');
+        const serviceCategory = document.getElementById('service-category');
+        const servicePrice = document.getElementById('service-price');
+        const serviceProvider = document.getElementById('service-provider');
+        
+        const bookingTime = document.getElementById('booking-time');
+        const addressSelect = document.getElementById('address-select');
+        const bookingNotes = document.getElementById('booking-notes');
+        const bookBtn = document.getElementById('book-btn');
+        const bookingSuccess = document.getElementById('booking-success');
+        const bookingError = document.getElementById('booking-error');
+        
+        const statusFilter = document.getElementById('status-filter');
+        const refreshBookings = document.getElementById('refresh-bookings');
+        const bookingsList = document.getElementById('bookings-list');
+
+        // Check if user is logged in
+        function checkAuth() {
+            console.log('Checking authentication, token exists:', !!token);
+            
+            // Show a loading indicator while checking auth
+            authMessage.textContent = token ? 'Checking login status...' : 'Please log in';
+            
+            if (token) {
+                // Initially show the main content immediately if token exists
+                // This prevents the flicker of login form -> main content
+                userInfo.classList.remove('hidden');
+                mainContent.classList.remove('hidden');
+                
+                fetch(`${API_URL}/client/profile`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                })
+                .then(res => {
+                    console.log('Auth check response status:', res.status);
+                    
+                    if (res.ok) {
+                        return res.json();
+                    } else {
+                        // Token invalid or expired
+                        localStorage.removeItem('token');
+                        token = null;
+                        showLoginForm();
+                        authMessage.textContent = 'Session expired. Please login again.';
+                        throw new Error('Invalid token');
+                    }
+                })
+                .then(data => {
+                    console.log('Auth check response data:', data);
+                    
+                    if (data.success && data.data) {
+                        // Profile fetch successful, update the UI with user data
+                        showUserInfo(data.data);
+                        // Load other data after confirming valid session
+                        loadCategories();
+                        loadAddresses();
+                        loadBookings();
+                    } else {
+                        // API returned success:false
+                        localStorage.removeItem('token');
+                        token = null;
+                        showLoginForm();
+                        authMessage.textContent = data.message || 'Authentication failed';
+                    }
+                })
+                .catch(err => {
+                    console.error('Auth check error:', err);
+                    showLoginForm();
+                });
+            } else {
+                // No token, show login form
+                showLoginForm();
+            }
+        }
+
+        function showLoginForm() {
+            // Reset form fields
+            emailInput.value = '';
+            passwordInput.value = '';
+            
+            // Show login form, hide user info and main content
+            loginForm.style.display = 'block';
+            userInfo.classList.add('hidden');
+            mainContent.classList.add('hidden');
+            
+            // Reset auth section style
+            authSection.style.padding = '15px';
+            authSection.style.maxHeight = '';
+            
+            console.log('Showing login form, hiding main content');
+        }
+
+        function showUserInfo(user) {
+            // Hide login form and show user info and main content
+            loginForm.style.display = 'none';
+            userInfo.classList.remove('hidden');
+            mainContent.classList.remove('hidden');
+            
+            // Safely access user properties with fallbacks
+            const firstName = user && user.firstName ? user.firstName : '';
+            const lastName = user && user.lastName ? user.lastName : '';
+            userName.textContent = `${firstName} ${lastName}`;
+            
+            // Display the current token for debugging
+            if (token) {
+                currentToken.textContent = token.length > 40 ? 
+                    token.substring(0, 20) + '...' + token.substring(token.length - 20) : 
+                    token;
+                
+                // Add click to reveal full token
+                currentToken.style.cursor = 'pointer';
+                currentToken.title = 'Click to reveal/hide full token';
+                currentToken.onclick = function() {
+                    if (this.dataset.expanded === 'true') {
+                        this.textContent = token.length > 40 ? 
+                            token.substring(0, 20) + '...' + token.substring(token.length - 20) : 
+                            token;
+                        this.dataset.expanded = 'false';
+                    } else {
+                        this.textContent = token;
+                        this.dataset.expanded = 'true';
+                    }
+                };
+                currentToken.dataset.expanded = 'false';
+            } else {
+                currentToken.textContent = 'No token available';
+            }
+            
+            // Make sure the auth section is visible but collapsed
+            authSection.style.padding = '10px';
+            authSection.style.maxHeight = 'auto';
+            
+            console.log('Showing main content');
+            // Scroll to top
+            window.scrollTo(0, 0);
+            
+            // Log the full user object for debugging
+            console.log('User data:', user);
+        }
+
+        // Login
+        loginBtn.addEventListener('click', () => {
+            const email = emailInput.value.trim();
+            const password = passwordInput.value;
+            
+            if (!email || !password) {
+                authMessage.textContent = 'Please enter both email and password';
+                return;
+            }
+            
+            authMessage.textContent = 'Logging in...';
+            
+            // Disable login button during login attempt
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Logging in...';
+            
+            fetch(`${API_URL}/login`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ email, password })
+            })
+            .then(res => {
+                console.log('Login response status:', res.status);
+                return res.json();
+            })
+            .then(data => {
+                console.log('Login response data:', data);
+                
+                // Re-enable login button
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Login';
+                
+                if (data.success && data.token) {
+                    // Set token and save to localStorage
+                    token = data.token;
+                    localStorage.setItem('token', token);
+                    authMessage.textContent = 'Login successful!';
+                    
+                    // Get user data from response or fetch it separately if not included
+                    if (data.user) {
+                        // Use the user data from the login response
+                        showUserInfo(data.user);
+                        loadCategories();
+                        loadAddresses();
+                        loadBookings();
+                    } else {
+                        // Fetch user data separately
+                        fetch(`${API_URL}/client/profile`, {
+                            headers: {
+                                'Authorization': `Bearer ${token}`
+                            }
+                        })
+                        .then(res => res.json())
+                        .then(profileData => {
+                            if (profileData.success) {
+                                showUserInfo(profileData.data || {});
+                            } else {
+                                console.error('Failed to get user profile:', profileData.message);
+                            }
+                            loadCategories();
+                            loadAddresses();
+                            loadBookings();
+                        })
+                        .catch(err => {
+                            console.error('Error fetching profile:', err);
+                            // Still show main content even if profile fetch fails
+                            showUserInfo({});
+                            loadCategories();
+                            loadAddresses();
+                            loadBookings();
+                        });
+                    }
+                } else {
+                    authMessage.textContent = data.message || 'Login failed';
+                }
+            })
+            .catch(err => {
+                console.error('Login error:', err);
+                authMessage.textContent = 'An error occurred during login';
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Login';
+            });
+        });
+
+        // Logout
+        logoutBtn.addEventListener('click', () => {
+            localStorage.removeItem('token');
+            token = null;
+            showLoginForm();
+        });
+
+        // Clear token
+        clearTokenBtn.addEventListener('click', () => {
+            localStorage.removeItem('token');
+            token = null;
+            authMessage.textContent = 'Token cleared. Please login again.';
+            showLoginForm();
+            console.log('Token cleared');
+        });
+
+        // Use manually entered token
+        useTokenBtn.addEventListener('click', () => {
+            const manualToken = authTokenInput.value.trim();
+            
+            if (!manualToken) {
+                authMessage.textContent = 'Please enter a token';
+                return;
+            }
+            
+            // Store and use the token
+            token = manualToken;
+            localStorage.setItem('token', token);
+            authMessage.textContent = 'Using provided token';
+            console.log('Using manually entered token');
+            
+            // Try to load profile with this token
+            fetch(`${API_URL}/client/profile`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            .then(res => {
+                console.log('Manual token auth response status:', res.status);
+                
+                if (res.ok) {
+                    return res.json();
+                } else {
+                    throw new Error(`HTTP error ${res.status}`);
+                }
+            })
+            .then(data => {
+                console.log('Profile data with manual token:', data);
+                
+                if (data.success && data.data) {
+                    showUserInfo(data.data);
+                    loadCategories();
+                    loadAddresses();
+                    loadBookings();
+                    authMessage.textContent = 'Authentication successful with manual token';
+                } else {
+                    authMessage.textContent = data.message || 'Invalid token';
+                }
+            })
+            .catch(err => {
+                console.error('Error using manual token:', err);
+                authMessage.textContent = `Error with token: ${err.message}`;
+            });
+        });
+
+        // Load service categories
+        function loadCategories() {
+            fetch(`${API_URL}/providers/categories`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    categoryFilter.innerHTML = '<option value="">All Categories</option>';
+                    data.data.forEach(category => {
+                        const option = document.createElement('option');
+                        option.value = category.id;
+                        option.textContent = category.name;
+                        categoryFilter.appendChild(option);
+                    });
+                }
+            })
+            .catch(err => console.error('Error loading categories:', err));
+        }
+
+        // Load client addresses
+        function loadAddresses() {
+            fetch(`${API_URL}/client/address`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    addressSelect.innerHTML = '<option value="">Select Address</option>';
+                    data.data.forEach(address => {
+                        const option = document.createElement('option');
+                        option.value = address.id;
+                        option.textContent = `${address.addressLine1}, ${address.city}, ${address.state}`;
+                        if (address.isDefault) {
+                            option.selected = true;
+                        }
+                        addressSelect.appendChild(option);
+                    });
+                }
+            })
+            .catch(err => console.error('Error loading addresses:', err));
+        }
+
+        // Search services
+        searchBtn.addEventListener('click', searchServices);
+
+        function searchServices() {
+            const searchTerm = searchInput.value.trim();
+            const categoryId = categoryFilter.value;
+            
+            let url = `${API_URL}/services?`;
+            if (searchTerm) url += `searchTerm=${encodeURIComponent(searchTerm)}&`;
+            if (categoryId) url += `categoryId=${encodeURIComponent(categoryId)}&`;
+            
+            fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    displayServices(data.data.services);
+                }
+            })
+            .catch(err => console.error('Error searching services:', err));
+        }
+
+        function displayServices(services) {
+            servicesList.innerHTML = '';
+            if (services.length === 0) {
+                servicesList.innerHTML = '<p>No services found</p>';
+                return;
+            }
+            
+            services.forEach(service => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `
+                    <div class="service-header">
+                        <h3>${service.title}</h3>
+                        <span class="service-price">$${service.pricing} ${service.pricingType.toLowerCase()}</span>
+                    </div>
+                    <p>${service.description.substring(0, 100)}${service.description.length > 100 ? '...' : ''}</p>
+                    <p>Category: ${service.category.name}</p>
+                    <p>Provider: ${service.provider.name}</p>
+                `;
+                
+                card.addEventListener('click', () => {
+                    displayServiceDetails(service);
+                });
+                
+                servicesList.appendChild(card);
+            });
+        }
+
+        function displayServiceDetails(service) {
+            currentService = service;
+            serviceTitle.textContent = service.title;
+            serviceDescription.textContent = service.description;
+            serviceCategory.textContent = service.category.name;
+            servicePrice.textContent = `$${service.pricing} ${service.pricingType.toLowerCase()}`;
+            serviceProvider.textContent = service.provider.name;
+            serviceDetails.classList.remove('hidden');
+            
+            // Set minimum booking time to now
+            const now = new Date();
+            now.setMinutes(now.getMinutes() + 30); // Minimum 30 minutes from now
+            const localDatetime = now.toISOString().slice(0, 16);
+            bookingTime.min = localDatetime;
+            bookingTime.value = localDatetime;
+            
+            // Hide any previous messages
+            bookingSuccess.style.display = 'none';
+            bookingError.style.display = 'none';
+        }
+
+        // Book a service
+        bookBtn.addEventListener('click', bookService);
+
+        function bookService() {
+            if (!currentService) return;
+            
+            if (!token) {
+                alert('You must be logged in to book a service');
+                showLoginForm();
+                return;
+            }
+            
+            const startTime = bookingTime.value;
+            const addressId = addressSelect.value;
+            const notes = bookingNotes.value.trim();
+            
+            if (!startTime) {
+                bookingError.textContent = 'Please select a booking time';
+                bookingError.style.display = 'block';
+                return;
+            }
+            
+            bookingError.style.display = 'none';
+            bookingSuccess.style.display = 'none';
+            
+            const bookingData = {
+                serviceId: currentService.id,
+                startTime: new Date(startTime).toISOString(),
+                notes: notes
+            };
+            
+            if (addressId) {
+                bookingData.addressId = addressId;
+            }
+            
+            console.log('Booking data:', bookingData);
+            
+            fetch(`${API_URL}/client/booking`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(bookingData)
+            })
+            .then(res => {
+                console.log('Booking response status:', res.status);
+                
+                if (res.status === 401 || res.status === 403) {
+                    // Unauthorized or Forbidden
+                    localStorage.removeItem('token');
+                    token = null;
+                    alert('Your session has expired. Please login again.');
+                    showLoginForm();
+                    throw new Error('Authentication failed');
+                }
+                
+                return res.json();
+            })
+            .then(data => {
+                console.log('Booking response data:', data);
+                
+                if (data.success) {
+                    bookingSuccess.style.display = 'block';
+                    bookingError.style.display = 'none';
+                    // Reset form
+                    bookingNotes.value = '';
+                    // Refresh bookings list
+                    loadBookings();
+                } else {
+                    bookingError.textContent = data.message || 'Error booking service';
+                    bookingError.style.display = 'block';
+                    bookingSuccess.style.display = 'none';
+                }
+            })
+            .catch(err => {
+                console.error('Booking error:', err);
+                if (err.message !== 'Authentication failed') {
+                    bookingError.textContent = 'An error occurred while booking';
+                    bookingError.style.display = 'block';
+                    bookingSuccess.style.display = 'none';
+                }
+            });
+        }
+
+        // Load client bookings
+        function loadBookings() {
+            if (!token) {
+                bookingsList.innerHTML = '<p>Please log in to view your bookings</p>';
+                return;
+            }
+            
+            const status = statusFilter.value;
+            let url = `${API_URL}/client/booking`;
+            if (status) url += `?status=${status}`;
+            
+            bookingsList.innerHTML = '<p>Loading bookings...</p>';
+            
+            fetch(url, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            .then(res => {
+                console.log('Bookings response status:', res.status);
+                
+                if (res.status === 401 || res.status === 403) {
+                    // Unauthorized or Forbidden
+                    localStorage.removeItem('token');
+                    token = null;
+                    showLoginForm();
+                    authMessage.textContent = 'Your session has expired. Please login again.';
+                    throw new Error('Authentication failed');
+                }
+                
+                return res.json();
+            })
+            .then(data => {
+                console.log('Bookings response data:', data);
+                
+                if (data.success) {
+                    displayBookings(data.data || []);
+                } else {
+                    bookingsList.innerHTML = `<p>Error: ${data.message || 'Could not load bookings'}</p>`;
+                }
+            })
+            .catch(err => {
+                console.error('Error loading bookings:', err);
+                if (err.message !== 'Authentication failed') {
+                    bookingsList.innerHTML = '<p>Error loading bookings. Please try again later.</p>';
+                }
+            });
+        }
+
+        function displayBookings(bookings) {
+            bookingsList.innerHTML = '';
+            if (bookings.length === 0) {
+                bookingsList.innerHTML = '<p>No bookings found</p>';
+                return;
+            }
+            
+            bookings.forEach(booking => {
+                const bookingDate = new Date(booking.startTime);
+                const formattedDate = bookingDate.toLocaleString();
+                
+                const statusClass = `status-${booking.status.toLowerCase()}`;
+                
+                const bookingItem = document.createElement('div');
+                bookingItem.className = 'booking-item';
+                bookingItem.innerHTML = `
+                    <h3>${booking.title || booking.service.title}</h3>
+                    <p><strong>Date/Time:</strong> ${formattedDate}</p>
+                    <p><strong>Provider:</strong> ${booking.serviceProvider.user.firstName} ${booking.serviceProvider.user.lastName}</p>
+                    <p><strong>Price:</strong> $${booking.totalAmount}</p>
+                    <p><strong>Status:</strong> <span class="booking-status ${statusClass}">${booking.status}</span></p>
+                `;
+                
+                if (booking.status === 'PENDING' || booking.status === 'CONFIRMED') {
+                    const cancelBtn = document.createElement('button');
+                    cancelBtn.textContent = 'Cancel Booking';
+                    cancelBtn.addEventListener('click', () => cancelBooking(booking.id));
+                    bookingItem.appendChild(cancelBtn);
+                }
+                
+                bookingsList.appendChild(bookingItem);
+            });
+        }
+
+        // Cancel a booking
+        function cancelBooking(bookingId) {
+            if (!token) {
+                alert('You must be logged in to cancel a booking');
+                showLoginForm();
+                return;
+            }
+            
+            if (!confirm('Are you sure you want to cancel this booking?')) return;
+            
+            fetch(`${API_URL}/client/booking/${bookingId}/cancel`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            .then(res => {
+                console.log('Cancel booking response status:', res.status);
+                
+                if (res.status === 401 || res.status === 403) {
+                    // Unauthorized or Forbidden
+                    localStorage.removeItem('token');
+                    token = null;
+                    alert('Your session has expired. Please login again.');
+                    showLoginForm();
+                    throw new Error('Authentication failed');
+                }
+                
+                return res.json();
+            })
+            .then(data => {
+                console.log('Cancel booking response data:', data);
+                
+                if (data.success) {
+                    alert('Booking cancelled successfully');
+                    loadBookings();
+                } else {
+                    alert(data.message || 'Error cancelling booking');
+                }
+            })
+            .catch(err => {
+                console.error('Cancel error:', err);
+                if (err.message !== 'Authentication failed') {
+                    alert('An error occurred while cancelling the booking');
+                }
+            });
+        }
+
+        // Refresh bookings on status filter change
+        statusFilter.addEventListener('change', loadBookings);
+        refreshBookings.addEventListener('click', loadBookings);
+
+        // Initialize page
+        checkAuth();
+    </script>
+</body>
+</html>
