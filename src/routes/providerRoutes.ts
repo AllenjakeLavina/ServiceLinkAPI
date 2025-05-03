@@ -17,10 +17,20 @@ import {
   handleAcceptBooking,
   handleDeclineBooking,
   handleStartService,
-  handleCompleteService
+  handleCompleteService,
+  createReviewController,
+  getReviewsReceivedController,
+  getReviewsGivenController,
+  getProviderReviewsController,
+  addAvailabilitySlotController,
+  getAvailabilityController,
+  updateAvailabilitySlotController,
+  deleteAvailabilitySlotController
 } from '../httpControllers/providerHttpController';
+import { handleMarkPaymentCompleted } from '../httpControllers/clientHttpController';
 import { authenticateToken, checkProviderVerification } from '../middlewares/authMiddleware';
 import { uploadFile } from '../middlewares/fileHandler';
+import { getContractController, createContractController, updateContractController, signContractController } from '../httpControllers/providerHttpController';
 
 const router = express.Router();
 
@@ -65,5 +75,26 @@ router.post('/bookings/:bookingId/accept', authenticateToken, handleAcceptBookin
 router.post('/bookings/:bookingId/decline', authenticateToken, handleDeclineBooking);
 router.post('/bookings/:bookingId/start', authenticateToken, handleStartService);
 router.post('/bookings/:bookingId/complete', authenticateToken, handleCompleteService);
+
+// Payment management routes
+router.post('/bookings/:bookingId/payment/complete', authenticateToken, handleMarkPaymentCompleted);
+
+// Contract Routes
+router.get('/contracts/:contractId', authenticateToken, getContractController);
+router.post('/bookings/:bookingId/contracts', authenticateToken, createContractController);
+router.put('/contracts/:contractId', authenticateToken, updateContractController);
+router.post('/contracts/:contractId/sign', authenticateToken, signContractController);
+
+// Review Routes
+router.post('/bookings/:bookingId/reviews', authenticateToken, createReviewController);
+router.get('/reviews/received', authenticateToken, getReviewsReceivedController);
+router.get('/reviews/given', authenticateToken, getReviewsGivenController);
+router.get('/providers/:providerId/reviews', getProviderReviewsController);
+
+// Availability Routes
+router.post('/availability', authenticateToken, addAvailabilitySlotController);
+router.get('/availability', authenticateToken, getAvailabilityController);
+router.put('/availability/:slotId', authenticateToken, updateAvailabilitySlotController);
+router.delete('/availability/:slotId', authenticateToken, deleteAvailabilitySlotController);
 
 export const providerRoutes = router;

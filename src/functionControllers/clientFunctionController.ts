@@ -734,3 +734,537 @@ export const cancelBooking = async (userId: string, bookingId: string) => {
     throw error;
   }
 };
+
+export const processPayment = async (
+  userId: string,
+  bookingId: string
+) => {
+  try {
+    // Find client by userId
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { client: true }
+    });
+
+    if (!user || !user.client) {
+      throw new Error('Client not found');
+    }
+
+    // Find the booking and ensure it belongs to this client
+    const booking = await prisma.serviceBooking.findFirst({
+      where: {
+        id: bookingId,
+        clientId: user.client.id
+      },
+      include: {
+        service: true,
+        serviceProvider: {
+          include: {
+            user: true
+          }
+        },
+        payment: true
+      }
+    });
+
+    if (!booking) {
+      throw new Error('Booking not found or not authorized');
+    }
+
+    // Check if payment already exists
+    if (booking.payment && booking.payment.status === 'COMPLETED') {
+      throw new Error('Payment has already been processed for this booking');
+    }
+
+    // For cash payment, we'll create or update the payment record
+    // and mark it as pending since it will be collected in person
+    const paymentData = {
+      amount: booking.totalAmount || booking.service.pricing,
+      status: 'PENDING' as const,
+      paymentMethod: 'CASH',
+      paymentDate: new Date()
+    };
+
+    let payment;
+    if (booking.payment) {
+      // Update existing payment
+      payment = await prisma.payment.update({
+        where: { serviceBookingId: booking.id },
+        data: paymentData
+      });
+    } else {
+      // Create new payment
+      payment = await prisma.payment.create({
+        data: {
+          ...paymentData,
+          serviceBookingId: booking.id
+        }
+      });
+    }
+
+    // Update booking status to CONFIRMED
+    const updatedBooking = await prisma.serviceBooking.update({
+      where: { id: booking.id },
+      data: { status: 'CONFIRMED' }
+    });
+
+    // Create notification for provider
+    await prisma.notification.create({
+      data: {
+        receiverId: booking.serviceProvider.user.id,
+        type: 'BOOKING_CONFIRMED',
+        title: 'Booking Confirmed',
+        message: `The booking for "${booking.service.title}" has been confirmed. Payment will be collected in cash.`,
+        isRead: false,
+        data: JSON.stringify({
+          bookingId: booking.id,
+          serviceId: booking.service.id,
+          paymentMethod: 'CASH',
+          amount: paymentData.amount.toString()
+        })
+      }
+    });
+
+    return {
+      booking: updatedBooking,
+      payment
+    };
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const markPaymentCompleted = async (
+  userId: string,
+  bookingId: string
+) => {
+  try {
+    // Find client by userId
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { 
+        client: true,
+        serviceProvider: true
+      }
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Find the booking
+    const booking = await prisma.serviceBooking.findUnique({
+      where: { id: bookingId },
+      include: {
+        payment: true,
+        client: {
+          include: {
+            user: true
+          }
+        },
+        serviceProvider: {
+          include: {
+            user: true
+          }
+        }
+      }
+    });
+
+    if (!booking) {
+      throw new Error('Booking not found');
+    }
+
+    // Check authorization - only allow service provider to mark payment as completed
+    if (!user.serviceProvider || user.serviceProvider.id !== booking.serviceProviderId) {
+      throw new Error('Only the service provider can mark a payment as completed');
+    }
+
+    // Check if payment exists
+    if (!booking.payment) {
+      throw new Error('No payment record found for this booking');
+    }
+
+    // Update payment status to COMPLETED
+    const updatedPayment = await prisma.payment.update({
+      where: { id: booking.payment.id },
+      data: {
+        status: 'COMPLETED' as const,
+        paymentDate: new Date()
+      }
+    });
+
+    // Update booking status to IN_PROGRESS if it's CONFIRMED
+    if (booking.status === 'CONFIRMED') {
+      await prisma.serviceBooking.update({
+        where: { id: booking.id },
+        data: { status: 'IN_PROGRESS' }
+      });
+    }
+
+    // Create notification for client
+    await prisma.notification.create({
+      data: {
+        receiverId: booking.client.user.id,
+        type: 'PAYMENT_RECEIVED',
+        title: 'Payment Received',
+        message: `Your cash payment for "${booking.title || 'service booking'}" has been received and marked as completed.`,
+        isRead: false,
+        data: JSON.stringify({
+          bookingId: booking.id,
+          paymentId: updatedPayment.id,
+          amount: updatedPayment.amount.toString()
+        })
+      }
+    });
+
+    return updatedPayment;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Contract Functions
+export const signContract = async (userId: string, contractId: string) => {
+  // Get the user with client information
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      client: true
+    }
+  });
+
+  if (!user || !user.client) {
+    throw new Error('User not found or not a client');
+  }
+
+  // Find the contract
+  const contract = await prisma.contract.findUnique({
+    where: { id: contractId },
+    include: {
+      serviceBooking: {
+        include: {
+          client: true,
+          serviceProvider: {
+            include: {
+              user: true
+            }
+          },
+          service: true
+        }
+      }
+    }
+  });
+
+  if (!contract) {
+    throw new Error('Contract not found');
+  }
+
+  // Check if client owns this contract
+  if (contract.serviceBooking.clientId !== user.client.id) {
+    throw new Error('Not authorized to sign this contract');
+  }
+
+  // Check if client has already signed
+  if (contract.clientSigned) {
+    throw new Error('Contract already signed by client');
+  }
+
+  // Update the contract - mark as signed by client
+  const updatedContract = await prisma.contract.update({
+    where: { id: contractId },
+    data: {
+      clientSigned: true
+    },
+    include: {
+      serviceBooking: {
+        include: {
+          service: true,
+          serviceProvider: {
+            include: {
+              user: true
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // Notify the provider that client has signed the contract
+  await prisma.notification.create({
+    data: {
+      receiverId: contract.serviceBooking.serviceProvider.user.id,
+      type: 'CONTRACT_SIGNED',
+      title: 'Contract Signed',
+      message: `Client has signed the contract for service "${contract.serviceBooking.service.title}"`,
+      data: JSON.stringify({
+        contractId: contract.id,
+        bookingId: contract.serviceBookingId
+      }),
+      isRead: false
+    }
+  });
+
+  // If both parties have signed, update booking status to confirmed
+  if (updatedContract.providerSigned && updatedContract.clientSigned) {
+    await prisma.serviceBooking.update({
+      where: { id: contract.serviceBookingId },
+      data: {
+        status: 'CONFIRMED'
+      }
+    });
+  }
+
+  return updatedContract;
+};
+
+export const getClientContracts = async (userId: string) => {
+  // Get the user with client information
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      client: true
+    }
+  });
+
+  if (!user || !user.client) {
+    throw new Error('User not found or not a client');
+  }
+
+  // Find all contracts associated with this client
+  const contracts = await prisma.contract.findMany({
+    where: {
+      serviceBooking: {
+        clientId: user.client.id
+      }
+    },
+    include: {
+      serviceBooking: {
+        include: {
+          service: true,
+          serviceProvider: {
+            include: {
+              user: {
+                select: {
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                  profilePicture: true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    orderBy: {
+      createdAt: 'desc'
+    }
+  });
+
+  return contracts;
+};
+
+export const getClientContractDetails = async (userId: string, contractId: string) => {
+  // Get the user with client information
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      client: true
+    }
+  });
+
+  if (!user || !user.client) {
+    throw new Error('User not found or not a client');
+  }
+
+  // Find the contract
+  const contract = await prisma.contract.findUnique({
+    where: { id: contractId },
+    include: {
+      serviceBooking: {
+        include: {
+          client: true,
+          service: true,
+          serviceProvider: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  firstName: true,
+                  lastName: true,
+                  email: true,
+                  profilePicture: true
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  });
+
+  if (!contract) {
+    throw new Error('Contract not found');
+  }
+
+  // Check if client owns this contract
+  if (contract.serviceBooking.clientId !== user.client.id) {
+    throw new Error('Not authorized to access this contract');
+  }
+
+  return contract;
+};
+
+// Review Functions
+export const createReview = async (
+  userId: string,
+  bookingId: string,
+  reviewData: {
+    rating: number;
+    comment?: string;
+  }
+) => {
+  // Get the user with client information
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      client: true
+    }
+  });
+
+  if (!user || !user.client) {
+    throw new Error('User not found or not a client');
+  }
+
+  // Find the booking and ensure it belongs to this client
+  const booking = await prisma.serviceBooking.findFirst({
+    where: {
+      id: bookingId,
+      clientId: user.client.id
+    },
+    include: {
+      serviceProvider: {
+        include: {
+          user: true
+        }
+      },
+      service: true
+    }
+  });
+
+  if (!booking) {
+    throw new Error('Booking not found or not authorized');
+  }
+
+  // Check if the booking is completed
+  if (booking.status !== 'COMPLETED') {
+    throw new Error('Cannot review a booking that is not completed');
+  }
+
+  // Check if a review already exists for this booking
+  const existingReview = await prisma.review.findFirst({
+    where: {
+      giverId: user.id,
+      receiverId: booking.serviceProvider.user.id
+    }
+  });
+
+  if (existingReview) {
+    throw new Error('You have already reviewed this service provider');
+  }
+
+  // Create a new review
+  const review = await prisma.review.create({
+    data: {
+      rating: reviewData.rating,
+      comment: reviewData.comment,
+      giverId: user.id,
+      receiverId: booking.serviceProvider.user.id
+    }
+  });
+
+  // Calculate new average rating for the service provider
+  const allReviews = await prisma.review.findMany({
+    where: {
+      receiverId: booking.serviceProvider.user.id
+    }
+  });
+
+  const averageRating = allReviews.reduce((sum, review) => sum + review.rating, 0) / allReviews.length;
+
+  // Update provider's rating
+  await prisma.serviceProvider.update({
+    where: {
+      id: booking.serviceProviderId
+    },
+    data: {
+      rating: averageRating
+    }
+  });
+
+  // Create notification for the provider
+  await prisma.notification.create({
+    data: {
+      receiverId: booking.serviceProvider.user.id,
+      type: 'REVIEW_RECEIVED',
+      title: 'New Review Received',
+      message: `You received a ${reviewData.rating}-star review from ${user.firstName} ${user.lastName}`,
+      data: JSON.stringify({
+        bookingId: booking.id,
+        serviceId: booking.serviceId,
+        reviewId: review.id
+      }),
+      isRead: false
+    }
+  });
+
+  return review;
+};
+
+export const getReviewsReceived = async (userId: string) => {
+  // Get reviews received by the user
+  const reviews = await prisma.review.findMany({
+    where: {
+      receiverId: userId
+    },
+    include: {
+      giver: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          profilePicture: true
+        }
+      }
+    },
+    orderBy: {
+      createdAt: 'desc'
+    }
+  });
+
+  return reviews;
+};
+
+export const getReviewsGiven = async (userId: string) => {
+  // Get reviews given by the user
+  const reviews = await prisma.review.findMany({
+    where: {
+      giverId: userId
+    },
+    include: {
+      receiver: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          profilePicture: true
+        }
+      }
+    },
+    orderBy: {
+      createdAt: 'desc'
+    }
+  });
+
+  return reviews;
+};

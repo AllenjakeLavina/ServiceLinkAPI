@@ -2,7 +2,10 @@ import { Request, Response } from 'express';
 import { registerProvider, updateProviderProfile, getProviderProfile, addWorkExperience, addEducation, 
   addSkill, addPortfolio, createService, getCategories, 
   addDocument, getProviderVerificationStatus, createProviderVerificationNotification,
-  getProviderBookings, getProviderBookingDetails, acceptBooking, declineBooking, startService, completeService} from '../functionControllers/providerFunctionController';
+  getProviderBookings, getProviderBookingDetails, acceptBooking, declineBooking, startService, completeService,
+  getContractDetails, createContract, updateContract, signContract,
+  createClientReview, getReviewsReceived, getReviewsGiven, getServiceProviderReviews,
+  addAvailabilitySlot, getAvailability, updateAvailabilitySlot, deleteAvailabilitySlot } from '../functionControllers/providerFunctionController';
 import { uploadFile, getFileUrl } from '../middlewares/fileHandler';
 import multer from 'multer';
 import express from 'express';
@@ -779,5 +782,578 @@ export const handleCompleteService = async (req: Request, res: Response) => {
       message: errorMessage
     });
     return;
+  }
+};
+
+// Contract HTTP Controllers
+export const getContractController = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { contractId } = req.params;
+    
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: 'Unauthorized - User not authenticated'
+      });
+      return;
+    }
+
+    if (!contractId) {
+      res.status(400).json({
+        success: false,
+        message: 'Contract ID is required'
+      });
+      return;
+    }
+
+    const contract = await getContractDetails(userId, contractId);
+    
+    res.status(200).json({
+      success: true,
+      data: contract
+    });
+  } catch (error: any) {
+    console.error('Error in getContractController:', error);
+    
+    if (error.message.includes('Not authorized') || error.message.includes('Contract not found')) {
+      res.status(404).json({
+        success: false,
+        message: error.message
+      });
+      return;
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to get contract details',
+      error: error
+    });
+  }
+};
+
+export const createContractController = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { bookingId } = req.params;
+    const contractData = req.body;
+    
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: 'Unauthorized - User not authenticated'
+      });
+      return;
+    }
+
+    if (!bookingId) {
+      res.status(400).json({
+        success: false,
+        message: 'Booking ID is required'
+      });
+      return;
+    }
+
+    if (!contractData || !contractData.terms || !contractData.paymentAmount || !contractData.paymentType) {
+      res.status(400).json({
+        success: false,
+        message: 'Contract terms, payment amount, and payment type are required'
+      });
+      return;
+    }
+
+    const contract = await createContract(userId, bookingId, contractData);
+    
+    res.status(201).json({
+      success: true,
+      message: 'Contract created successfully',
+      data: contract
+    });
+  } catch (error: any) {
+    console.error('Error in createContractController:', error);
+    
+    if (error.message.includes('Not authorized') || 
+        error.message.includes('Booking not found') ||
+        error.message.includes('already exists')) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+      return;
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to create contract',
+      error: error
+    });
+  }
+};
+
+export const updateContractController = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { contractId } = req.params;
+    const contractData = req.body;
+    
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: 'Unauthorized - User not authenticated'
+      });
+      return;
+    }
+
+    if (!contractId) {
+      res.status(400).json({
+        success: false,
+        message: 'Contract ID is required'
+      });
+      return;
+    }
+
+    // At least one field should be provided for update
+    if (!contractData || (
+        !contractData.terms && 
+        !contractData.paymentAmount && 
+        !contractData.paymentType)) {
+      res.status(400).json({
+        success: false,
+        message: 'At least one field (terms, paymentAmount, paymentType) must be provided for update'
+      });
+      return;
+    }
+
+    const updatedContract = await updateContract(userId, contractId, contractData);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Contract updated successfully',
+      data: updatedContract
+    });
+  } catch (error: any) {
+    console.error('Error in updateContractController:', error);
+    
+    if (error.message.includes('Not authorized') || 
+        error.message.includes('Contract not found') ||
+        error.message.includes('Cannot update')) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+      return;
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to update contract',
+      error: error
+    });
+  }
+};
+
+export const signContractController = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { contractId } = req.params;
+    
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: 'Unauthorized - User not authenticated'
+      });
+      return;
+    }
+
+    if (!contractId) {
+      res.status(400).json({
+        success: false,
+        message: 'Contract ID is required'
+      });
+      return;
+    }
+
+    const signedContract = await signContract(userId, contractId);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Contract signed successfully',
+      data: signedContract
+    });
+  } catch (error: any) {
+    console.error('Error in signContractController:', error);
+    
+    if (error.message.includes('Not authorized') || 
+        error.message.includes('Contract not found') ||
+        error.message.includes('already signed')) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+      return;
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to sign contract',
+      error: error
+    });
+  }
+};
+
+// Review HTTP Controllers
+export const createReviewController = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { bookingId } = req.params;
+    const { rating, comment } = req.body;
+    
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: 'Unauthorized - User not authenticated'
+      });
+      return;
+    }
+
+    if (!bookingId) {
+      res.status(400).json({
+        success: false,
+        message: 'Booking ID is required'
+      });
+      return;
+    }
+
+    if (!rating || rating < 1 || rating > 5) {
+      res.status(400).json({
+        success: false,
+        message: 'Rating is required and must be between 1 and 5'
+      });
+      return;
+    }
+
+    const review = await createClientReview(userId, bookingId, { rating, comment });
+    
+    res.status(201).json({
+      success: true,
+      message: 'Review created successfully',
+      data: review
+    });
+  } catch (error: any) {
+    console.error('Error in createReviewController:', error);
+    
+    if (error.message.includes('already reviewed') || 
+        error.message.includes('not completed') || 
+        error.message.includes('not authorized') ||
+        error.message.includes('not found')) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+      return;
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to create review',
+      error: error
+    });
+  }
+};
+
+export const getReviewsReceivedController = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: 'Unauthorized - User not authenticated'
+      });
+      return;
+    }
+
+    const reviews = await getReviewsReceived(userId);
+    
+    res.status(200).json({
+      success: true,
+      data: reviews
+    });
+  } catch (error: any) {
+    console.error('Error in getReviewsReceivedController:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to get reviews',
+      error: error
+    });
+  }
+};
+
+export const getReviewsGivenController = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: 'Unauthorized - User not authenticated'
+      });
+      return;
+    }
+
+    const reviews = await getReviewsGiven(userId);
+    
+    res.status(200).json({
+      success: true,
+      data: reviews
+    });
+  } catch (error: any) {
+    console.error('Error in getReviewsGivenController:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to get reviews',
+      error: error
+    });
+  }
+};
+
+export const getProviderReviewsController = async (req: Request, res: Response) => {
+  try {
+    const { providerId } = req.params;
+    
+    if (!providerId) {
+      res.status(400).json({
+        success: false,
+        message: 'Provider ID is required'
+      });
+      return;
+    }
+
+    const providerReviews = await getServiceProviderReviews(providerId);
+    
+    res.status(200).json({
+      success: true,
+      data: providerReviews
+    });
+  } catch (error: any) {
+    console.error('Error in getProviderReviewsController:', error);
+    if (error.message.includes('not found')) {
+      res.status(404).json({
+        success: false,
+        message: error.message
+      });
+      return;
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to get provider reviews',
+      error: error
+    });
+  }
+};
+
+// Availability HTTP Controllers
+export const addAvailabilitySlotController = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { dayOfWeek, startTime, endTime, isAvailable } = req.body;
+    
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: 'Unauthorized - User not authenticated'
+      });
+      return;
+    }
+
+    // Validate required fields
+    if (dayOfWeek === undefined || !startTime || !endTime) {
+      res.status(400).json({
+        success: false,
+        message: 'Day of week, start time, and end time are required'
+      });
+      return;
+    }
+
+    const availabilitySlot = await addAvailabilitySlot(userId, {
+      dayOfWeek: parseInt(dayOfWeek),
+      startTime,
+      endTime,
+      isAvailable
+    });
+    
+    res.status(201).json({
+      success: true,
+      message: 'Availability slot added successfully',
+      data: availabilitySlot
+    });
+  } catch (error: any) {
+    console.error('Error in addAvailabilitySlotController:', error);
+    
+    if (error.message.includes('Day of week') || 
+        error.message.includes('format') || 
+        error.message.includes('after start time') ||
+        error.message.includes('overlaps')) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+      return;
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to add availability slot',
+      error: error
+    });
+  }
+};
+
+export const getAvailabilityController = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: 'Unauthorized - User not authenticated'
+      });
+      return;
+    }
+
+    const availability = await getAvailability(userId);
+    
+    res.status(200).json({
+      success: true,
+      data: availability
+    });
+  } catch (error: any) {
+    console.error('Error in getAvailabilityController:', error);
+    
+    if (error.message.includes('not found')) {
+      res.status(404).json({
+        success: false,
+        message: error.message
+      });
+      return;
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to get availability',
+      error: error
+    });
+  }
+};
+
+export const updateAvailabilitySlotController = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { slotId } = req.params;
+    const { startTime, endTime, isAvailable } = req.body;
+    
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: 'Unauthorized - User not authenticated'
+      });
+      return;
+    }
+
+    if (!slotId) {
+      res.status(400).json({
+        success: false,
+        message: 'Availability slot ID is required'
+      });
+      return;
+    }
+
+    // At least one field should be provided for update
+    if (startTime === undefined && endTime === undefined && isAvailable === undefined) {
+      res.status(400).json({
+        success: false,
+        message: 'At least one field (startTime, endTime, isAvailable) must be provided for update'
+      });
+      return;
+    }
+
+    const updatedSlot = await updateAvailabilitySlot(userId, slotId, {
+      startTime,
+      endTime,
+      isAvailable
+    });
+    
+    res.status(200).json({
+      success: true,
+      message: 'Availability slot updated successfully',
+      data: updatedSlot
+    });
+  } catch (error: any) {
+    console.error('Error in updateAvailabilitySlotController:', error);
+    
+    if (error.message.includes('permission') || 
+        error.message.includes('not found') ||
+        error.message.includes('format') ||
+        error.message.includes('after start time') ||
+        error.message.includes('overlap')) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+      return;
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to update availability slot',
+      error: error
+    });
+  }
+};
+
+export const deleteAvailabilitySlotController = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const { slotId } = req.params;
+    
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        message: 'Unauthorized - User not authenticated'
+      });
+      return;
+    }
+
+    if (!slotId) {
+      res.status(400).json({
+        success: false,
+        message: 'Availability slot ID is required'
+      });
+      return;
+    }
+
+    const result = await deleteAvailabilitySlot(userId, slotId);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Availability slot deleted successfully'
+    });
+  } catch (error: any) {
+    console.error('Error in deleteAvailabilitySlotController:', error);
+    
+    if (error.message.includes('permission') || error.message.includes('not found')) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      });
+      return;
+    }
+    
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Failed to delete availability slot',
+      error: error
+    });
   }
 };

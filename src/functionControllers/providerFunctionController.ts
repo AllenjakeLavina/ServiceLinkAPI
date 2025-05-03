@@ -1059,3 +1059,778 @@ export const completeService = async (userId: string, bookingId: string) => {
     throw error;
   }
 };
+
+export const createContract = async (
+  userId: string,
+  bookingId: string,
+  contractData: {
+    terms: string;
+    paymentAmount: number;
+    paymentType: 'HOURLY' | 'FIXED' | 'DAILY' | 'SESSION';
+  }
+) => {
+  try {
+    // Find provider by userId
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { serviceProvider: true }
+    });
+
+    if (!user || !user.serviceProvider) {
+      throw new Error('Provider not found');
+    }
+
+    // Find the booking and ensure it belongs to this provider
+    const booking = await prisma.serviceBooking.findFirst({
+      where: {
+        id: bookingId,
+        serviceProviderId: user.serviceProvider.id
+      },
+      include: {
+        client: {
+          include: {
+            user: true
+          }
+        },
+        service: true,
+        contract: true
+      }
+    });
+
+    if (!booking) {
+      throw new Error('Booking not found or not authorized');
+    }
+
+    // Check if contract already exists
+    if (booking.contract) {
+      throw new Error('Contract already exists for this booking');
+    }
+
+    // Create the contract
+    const contract = await prisma.contract.create({
+      data: {
+        serviceBookingId: booking.id,
+        terms: contractData.terms,
+        paymentAmount: new Prisma.Decimal(contractData.paymentAmount.toString()),
+        paymentType: contractData.paymentType,
+        providerSigned: true, // Provider signs when creating
+        clientSigned: false   // Client will sign later
+      }
+    });
+
+    // Create notification for client
+    await prisma.notification.create({
+      data: {
+        receiverId: booking.client.user.id,
+        type: 'CONTRACT_SIGNED',
+        title: 'New Contract Available',
+        message: `A contract for service "${booking.service.title}" is available for your review and signature.`,
+        isRead: false,
+        data: JSON.stringify({
+          bookingId: booking.id,
+          contractId: contract.id,
+          serviceId: booking.service.id
+        })
+      }
+    });
+
+    return contract;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getContractDetails = async (userId: string, contractId: string) => {
+  try {
+    // Find user by userId
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { 
+        serviceProvider: true,
+        client: true
+      }
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Find the contract
+    const contract = await prisma.contract.findUnique({
+      where: { id: contractId },
+      include: {
+        serviceBooking: {
+          include: {
+            client: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true
+                  }
+                }
+              }
+            },
+            serviceProvider: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    email: true
+                  }
+                }
+              }
+            },
+            service: true
+          }
+        }
+      }
+    });
+
+    if (!contract) {
+      throw new Error('Contract not found');
+    }
+
+    // Check authorization - only allow involved parties to access
+    const isProvider = user.serviceProvider && user.serviceProvider.id === contract.serviceBooking.serviceProviderId;
+    const isClient = user.client && user.client.id === contract.serviceBooking.clientId;
+
+    if (!isProvider && !isClient) {
+      throw new Error('Not authorized to access this contract');
+    }
+
+    return contract;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const updateContract = async (
+  userId: string,
+  contractId: string,
+  contractData: {
+    terms?: string;
+    paymentAmount?: number;
+    paymentType?: 'HOURLY' | 'FIXED' | 'DAILY' | 'SESSION';
+  }
+) => {
+  try {
+    // Find provider by userId
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { serviceProvider: true }
+    });
+
+    if (!user || !user.serviceProvider) {
+      throw new Error('Provider not found');
+    }
+
+    // Find the contract
+    const contract = await prisma.contract.findUnique({
+      where: { id: contractId },
+      include: {
+        serviceBooking: {
+          include: {
+            client: {
+              include: {
+                user: true
+              }
+            }
+          }
+        }
+      }
+    });
+
+    if (!contract) {
+      throw new Error('Contract not found');
+    }
+
+    // Check if provider owns this contract
+    if (contract.serviceBooking.serviceProviderId !== user.serviceProvider.id) {
+      throw new Error('Not authorized to update this contract');
+    }
+
+    // Check if client has already signed - can't update after client signs
+    if (contract.clientSigned) {
+      throw new Error('Cannot update contract after client has signed');
+    }
+
+    // Update the contract
+    const updatedContract = await prisma.contract.update({
+      where: { id: contractId },
+      data: {
+        terms: contractData.terms ?? contract.terms,
+        paymentAmount: contractData.paymentAmount ? 
+          new Prisma.Decimal(contractData.paymentAmount.toString()) : 
+          contract.paymentAmount,
+        paymentType: contractData.paymentType ?? contract.paymentType,
+        providerSigned: true, // Re-sign after update
+        clientSigned: false   // Reset client signature
+      }
+    });
+
+    // Notify client of contract update
+    await prisma.notification.create({
+      data: {
+        receiverId: contract.serviceBooking.client.user.id,
+        type: 'CONTRACT_SIGNED',
+        title: 'Contract Updated',
+        message: 'The service contract has been updated. Please review and sign the updated contract.',
+        isRead: false,
+        data: JSON.stringify({
+          contractId: contract.id,
+          bookingId: contract.serviceBooking.id
+        })
+      }
+    });
+
+    return updatedContract;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const signContract = async (userId: string, contractId: string) => {
+  // Get the user with provider information
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      serviceProvider: true
+    }
+  });
+
+  if (!user || !user.serviceProvider) {
+    throw new Error('User not found or not a service provider');
+  }
+
+  // Find the contract
+  const contract = await prisma.contract.findUnique({
+    where: { id: contractId },
+    include: {
+      serviceBooking: {
+        include: {
+          client: {
+            include: {
+              user: true
+            }
+          },
+          service: true
+        }
+      }
+    }
+  });
+
+  if (!contract) {
+    throw new Error('Contract not found');
+  }
+
+  // Check if provider owns this contract
+  if (contract.serviceBooking.serviceProviderId !== user.serviceProvider.id) {
+    throw new Error('Not authorized to sign this contract');
+  }
+
+  // Check if provider has already signed
+  if (contract.providerSigned) {
+    throw new Error('Contract already signed by provider');
+  }
+
+  // Update the contract - mark as signed by provider
+  const updatedContract = await prisma.contract.update({
+    where: { id: contractId },
+    data: {
+      providerSigned: true
+    },
+    include: {
+      serviceBooking: {
+        include: {
+          service: true,
+          client: {
+            include: {
+              user: true
+            }
+          }
+        }
+      }
+    }
+  });
+
+  // Notify the client that provider has signed the contract
+  await prisma.notification.create({
+    data: {
+      receiverId: contract.serviceBooking.client.user.id,
+      type: 'CONTRACT_SIGNED',
+      title: 'Contract Signed',
+      message: `Service provider has signed the contract for service "${contract.serviceBooking.service.title}"`,
+      data: JSON.stringify({
+        contractId: contract.id,
+        bookingId: contract.serviceBookingId
+      }),
+      isRead: false
+    }
+  });
+
+  // If both parties have signed, update booking status to confirmed
+  if (updatedContract.providerSigned && updatedContract.clientSigned) {
+    await prisma.serviceBooking.update({
+      where: { id: contract.serviceBookingId },
+      data: {
+        status: 'CONFIRMED'
+      }
+    });
+  }
+
+  return updatedContract;
+};
+
+// Review Functions
+export const createClientReview = async (
+  userId: string,
+  bookingId: string,
+  reviewData: {
+    rating: number;
+    comment?: string;
+  }
+) => {
+  // Get the user with provider information
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: {
+      serviceProvider: true
+    }
+  });
+
+  if (!user || !user.serviceProvider) {
+    throw new Error('User not found or not a service provider');
+  }
+
+  // Find the booking and ensure it belongs to this provider
+  const booking = await prisma.serviceBooking.findFirst({
+    where: {
+      id: bookingId,
+      serviceProviderId: user.serviceProvider.id
+    },
+    include: {
+      client: {
+        include: {
+          user: true
+        }
+      },
+      service: true
+    }
+  });
+
+  if (!booking) {
+    throw new Error('Booking not found or not authorized');
+  }
+
+  // Check if the booking is completed
+  if (booking.status !== 'COMPLETED') {
+    throw new Error('Cannot review a booking that is not completed');
+  }
+
+  // Check if a review already exists for this booking
+  const existingReview = await prisma.review.findFirst({
+    where: {
+      giverId: user.id,
+      receiverId: booking.client.user.id
+    }
+  });
+
+  if (existingReview) {
+    throw new Error('You have already reviewed this client');
+  }
+
+  // Create a new review
+  const review = await prisma.review.create({
+    data: {
+      rating: reviewData.rating,
+      comment: reviewData.comment,
+      giverId: user.id,
+      receiverId: booking.client.user.id
+    }
+  });
+
+  // Create notification for the client
+  await prisma.notification.create({
+    data: {
+      receiverId: booking.client.user.id,
+      type: 'REVIEW_RECEIVED',
+      title: 'New Review Received',
+      message: `You received a ${reviewData.rating}-star review from ${user.firstName} ${user.lastName}`,
+      data: JSON.stringify({
+        bookingId: booking.id,
+        serviceId: booking.serviceId,
+        reviewId: review.id
+      }),
+      isRead: false
+    }
+  });
+
+  return review;
+};
+
+export const getReviewsReceived = async (userId: string) => {
+  // Get reviews received by the user
+  const reviews = await prisma.review.findMany({
+    where: {
+      receiverId: userId
+    },
+    include: {
+      giver: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          profilePicture: true
+        }
+      }
+    },
+    orderBy: {
+      createdAt: 'desc'
+    }
+  });
+
+  return reviews;
+};
+
+export const getReviewsGiven = async (userId: string) => {
+  // Get reviews given by the user
+  const reviews = await prisma.review.findMany({
+    where: {
+      giverId: userId
+    },
+    include: {
+      receiver: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          profilePicture: true
+        }
+      }
+    },
+    orderBy: {
+      createdAt: 'desc'
+    }
+  });
+
+  return reviews;
+};
+
+export const getServiceProviderReviews = async (providerId: string) => {
+  // Get the provider user
+  const provider = await prisma.serviceProvider.findUnique({
+    where: { id: providerId },
+    include: {
+      user: true
+    }
+  });
+
+  if (!provider) {
+    throw new Error('Service provider not found');
+  }
+
+  // Get all reviews for this provider
+  const reviews = await prisma.review.findMany({
+    where: {
+      receiverId: provider.user.id
+    },
+    include: {
+      giver: {
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          profilePicture: true
+        }
+      }
+    },
+    orderBy: {
+      createdAt: 'desc'
+    }
+  });
+
+  return {
+    provider: {
+      id: provider.id,
+      userId: provider.userId,
+      firstName: provider.user.firstName,
+      lastName: provider.user.lastName,
+      rating: provider.rating
+    },
+    reviews: reviews,
+    averageRating: provider.rating,
+    totalReviews: reviews.length
+  };
+};
+
+// Availability Functions
+export const addAvailabilitySlot = async (
+  userId: string,
+  availabilityData: {
+    dayOfWeek: number; // 0-6 (Sunday-Saturday)
+    startTime: string; // Format: "HH:MM" in 24-hour
+    endTime: string; // Format: "HH:MM" in 24-hour
+    isAvailable?: boolean;
+  }
+) => {
+  // Validate input
+  if (availabilityData.dayOfWeek < 0 || availabilityData.dayOfWeek > 6) {
+    throw new Error('Day of week must be between 0 (Sunday) and 6 (Saturday)');
+  }
+
+  const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/; // 24-hour format: HH:MM
+  if (!timeRegex.test(availabilityData.startTime) || !timeRegex.test(availabilityData.endTime)) {
+    throw new Error('Time must be in 24-hour format (HH:MM)');
+  }
+
+  // Parse times to compare them
+  const [startHour, startMinute] = availabilityData.startTime.split(':').map(Number);
+  const [endHour, endMinute] = availabilityData.endTime.split(':').map(Number);
+  
+  // Convert to minutes for easy comparison
+  const startTimeMinutes = startHour * 60 + startMinute;
+  const endTimeMinutes = endHour * 60 + endMinute;
+
+  if (startTimeMinutes >= endTimeMinutes) {
+    throw new Error('End time must be after start time');
+  }
+
+  // Find the user with service provider info
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { serviceProvider: true }
+  });
+
+  if (!user || !user.serviceProvider) {
+    throw new Error('Service provider not found');
+  }
+
+  // Check for overlapping availability slots
+  const existingSlots = await prisma.availability.findMany({
+    where: {
+      serviceProviderId: user.serviceProvider.id,
+      dayOfWeek: availabilityData.dayOfWeek,
+      isAvailable: true
+    }
+  });
+
+  for (const slot of existingSlots) {
+    const [slotStartHour, slotStartMinute] = slot.startTime.split(':').map(Number);
+    const [slotEndHour, slotEndMinute] = slot.endTime.split(':').map(Number);
+    
+    const slotStartMinutes = slotStartHour * 60 + slotStartMinute;
+    const slotEndMinutes = slotEndHour * 60 + slotEndMinute;
+
+    // Check for overlap
+    if (
+      (startTimeMinutes >= slotStartMinutes && startTimeMinutes < slotEndMinutes) || // Start time overlaps with existing slot
+      (endTimeMinutes > slotStartMinutes && endTimeMinutes <= slotEndMinutes) || // End time overlaps with existing slot
+      (startTimeMinutes <= slotStartMinutes && endTimeMinutes >= slotEndMinutes) // New slot completely covers existing slot
+    ) {
+      throw new Error(`This time slot overlaps with an existing availability slot (${slot.startTime} - ${slot.endTime})`);
+    }
+  }
+
+  // Create new availability slot
+  const availability = await prisma.availability.create({
+    data: {
+      serviceProviderId: user.serviceProvider.id,
+      dayOfWeek: availabilityData.dayOfWeek,
+      startTime: availabilityData.startTime,
+      endTime: availabilityData.endTime,
+      isAvailable: availabilityData.isAvailable !== false // Default to true unless explicitly set to false
+    }
+  });
+
+  return availability;
+};
+
+export const getAvailability = async (userId: string) => {
+  // Find the user with service provider info
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { serviceProvider: true }
+  });
+
+  if (!user || !user.serviceProvider) {
+    throw new Error('Service provider not found');
+  }
+
+  // Get all availability slots
+  const availabilitySlots = await prisma.availability.findMany({
+    where: {
+      serviceProviderId: user.serviceProvider.id
+    },
+    orderBy: [
+      { dayOfWeek: 'asc' },
+      { startTime: 'asc' }
+    ]
+  });
+
+  // Group by day of week for easier client-side consumption
+  const availabilityByDay = [0, 1, 2, 3, 4, 5, 6].map(day => {
+    const daySlots = availabilitySlots.filter(slot => slot.dayOfWeek === day);
+    return {
+      dayOfWeek: day,
+      dayName: getDayName(day),
+      slots: daySlots
+    };
+  });
+
+  return {
+    providerInfo: {
+      id: user.serviceProvider.id,
+      userId: user.id,
+      name: `${user.firstName} ${user.lastName}`
+    },
+    availabilityByDay
+  };
+};
+
+export const updateAvailabilitySlot = async (
+  userId: string,
+  slotId: string,
+  updateData: {
+    startTime?: string;
+    endTime?: string;
+    isAvailable?: boolean;
+  }
+) => {
+  // Find the user with service provider info
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { serviceProvider: true }
+  });
+
+  if (!user || !user.serviceProvider) {
+    throw new Error('Service provider not found');
+  }
+
+  // Find the slot and verify it belongs to this provider
+  const slot = await prisma.availability.findUnique({
+    where: { id: slotId }
+  });
+
+  if (!slot) {
+    throw new Error('Availability slot not found');
+  }
+
+  if (slot.serviceProviderId !== user.serviceProvider.id) {
+    throw new Error('You do not have permission to update this availability slot');
+  }
+
+  // Validate time formats if provided
+  const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+  const startTime = updateData.startTime || slot.startTime;
+  const endTime = updateData.endTime || slot.endTime;
+
+  if (updateData.startTime && !timeRegex.test(startTime)) {
+    throw new Error('Start time must be in 24-hour format (HH:MM)');
+  }
+
+  if (updateData.endTime && !timeRegex.test(endTime)) {
+    throw new Error('End time must be in 24-hour format (HH:MM)');
+  }
+
+  // Parse and compare times to ensure end is after start
+  if (updateData.startTime || updateData.endTime) {
+    const [startHour, startMinute] = startTime.split(':').map(Number);
+    const [endHour, endMinute] = endTime.split(':').map(Number);
+    
+    const startTimeMinutes = startHour * 60 + startMinute;
+    const endTimeMinutes = endHour * 60 + endMinute;
+
+    if (startTimeMinutes >= endTimeMinutes) {
+      throw new Error('End time must be after start time');
+    }
+
+    // Check for overlapping availability slots (excluding this slot)
+    if (updateData.startTime || updateData.endTime) {
+      const existingSlots = await prisma.availability.findMany({
+        where: {
+          serviceProviderId: user.serviceProvider.id,
+          dayOfWeek: slot.dayOfWeek,
+          isAvailable: true,
+          id: { not: slotId }
+        }
+      });
+
+      for (const existingSlot of existingSlots) {
+        const [slotStartHour, slotStartMinute] = existingSlot.startTime.split(':').map(Number);
+        const [slotEndHour, slotEndMinute] = existingSlot.endTime.split(':').map(Number);
+        
+        const slotStartMinutes = slotStartHour * 60 + slotStartMinute;
+        const slotEndMinutes = slotEndHour * 60 + slotEndMinute;
+
+        // Check for overlap
+        if (
+          (startTimeMinutes >= slotStartMinutes && startTimeMinutes < slotEndMinutes) ||
+          (endTimeMinutes > slotStartMinutes && endTimeMinutes <= slotEndMinutes) ||
+          (startTimeMinutes <= slotStartMinutes && endTimeMinutes >= slotEndMinutes)
+        ) {
+          throw new Error(`This time slot would overlap with an existing availability slot (${existingSlot.startTime} - ${existingSlot.endTime})`);
+        }
+      }
+    }
+  }
+
+  // Update the slot
+  const updatedSlot = await prisma.availability.update({
+    where: { id: slotId },
+    data: {
+      startTime: updateData.startTime,
+      endTime: updateData.endTime,
+      isAvailable: updateData.isAvailable
+    }
+  });
+
+  return updatedSlot;
+};
+
+export const deleteAvailabilitySlot = async (userId: string, slotId: string) => {
+  // Find the user with service provider info
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    include: { serviceProvider: true }
+  });
+
+  if (!user || !user.serviceProvider) {
+    throw new Error('Service provider not found');
+  }
+
+  // Find the slot and verify it belongs to this provider
+  const slot = await prisma.availability.findUnique({
+    where: { id: slotId }
+  });
+
+  if (!slot) {
+    throw new Error('Availability slot not found');
+  }
+
+  if (slot.serviceProviderId !== user.serviceProvider.id) {
+    throw new Error('You do not have permission to delete this availability slot');
+  }
+
+  // Check for any bookings that might depend on this availability slot
+  // This is a simplification. In a production system, you'd want to check
+  // if any bookings exist in this time slot on any day that matches this day of week.
+  // For simplicity, we're skipping this check here.
+
+  // Delete the slot
+  await prisma.availability.delete({
+    where: { id: slotId }
+  });
+
+  return { success: true, message: 'Availability slot deleted successfully' };
+};
+
+// Helper function to get day name
+const getDayName = (dayOfWeek: number): string => {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  return days[dayOfWeek];
+};

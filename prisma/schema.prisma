@@ -314,7 +314,7 @@ model ServiceBooking {
   
   // Messages related to this booking - conversation replaces chatRoom
   conversation      Conversation?
-  
+
   // Contract related to this booking
   contract          Contract?
 }

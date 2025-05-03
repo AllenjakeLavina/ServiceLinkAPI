@@ -7,11 +7,14 @@ import { adminRoutes } from './routes/adminRoutes';
 import { providerRoutes } from './routes/providerRoutes';
 import path from 'path';
 import { configureStaticFileServing } from './middlewares/fileHandler';
-
-
+import http from 'http';
+import { setupSocketServer } from './server/socketServer';
 
 const app = express();
 export const prisma = new PrismaClient();
+
+// Create HTTP server
+const server = http.createServer(app);
 
 // Middleware
 app.use(express.json());
@@ -66,6 +69,11 @@ app.get('/', (req: Request, res: Response) => {
 const PORT: number = 5500;
 const HOST: string = '0.0.0.0';
 
-app.listen(PORT, HOST, (): void => {
+// Setup Socket.IO server
+setupSocketServer(server);
+
+// Start the server
+server.listen(PORT, (): void => {
   console.log(`🚀 Server is running at http://${HOST}:${PORT}`);
+  console.log(`🔌 WebSocket server is running on the same port`);
 });
