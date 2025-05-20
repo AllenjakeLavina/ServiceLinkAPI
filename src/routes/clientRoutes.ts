@@ -9,6 +9,7 @@ import {
   createReviewController, getReviewsReceivedController, getReviewsGivenController
 } from '../httpControllers/clientHttpController';
 import { authenticateToken, authorizeRoles } from '../middlewares/authMiddleware';
+import { uploadFile } from '../middlewares/fileHandler';
 
 const router = express.Router();
 
@@ -34,7 +35,7 @@ router.get('/booking/:bookingId', authenticateToken, handleGetBookingDetails);
 router.post('/booking/:bookingId/cancel', authenticateToken, handleCancelBooking);
 
 // Payment management
-router.post('/booking/:bookingId/payment', authenticateToken, handleProcessPayment);
+router.post('/booking/:bookingId/payment', authenticateToken, uploadFile.single('paymentProof'), handleProcessPayment);
 router.post('/booking/:bookingId/payment/complete', authenticateToken, authorizeRoles('PROVIDER'), handleMarkPaymentCompleted);
 
 // Contract Routes
@@ -43,7 +44,7 @@ router.get('/contracts/:contractId', authenticateToken, getContractDetailsContro
 router.post('/contracts/:contractId/sign', authenticateToken, signContractController);
 
 // Review Routes
-router.post('/bookings/:bookingId/reviews', authenticateToken, createReviewController);
+router.post('/bookings/:bookingId/reviews', authenticateToken, uploadFile.array('images', 5), createReviewController);
 router.get('/reviews/received', authenticateToken, getReviewsReceivedController);
 router.get('/reviews/given', authenticateToken, getReviewsGivenController);
 

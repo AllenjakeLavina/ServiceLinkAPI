@@ -44,6 +44,16 @@ const storage = multer.diskStorage({
       
       return cb(null, chatDir);
     }
+    
+    // Check if this is a category image upload
+    if (req.originalUrl.includes('/category/image') || req.originalUrl.includes('/admin/category')) {
+      // For category images, use a category folder
+      const categoryDir = path.join(uploadsDir, 'category');
+      if (!fs.existsSync(categoryDir)) {
+        fs.mkdirSync(categoryDir, { recursive: true });
+      }
+      return cb(null, categoryDir);
+    }
 
     // For authenticated requests, use user-specific folders
     const userId = req.user?.id;
@@ -65,7 +75,7 @@ const storage = multer.diskStorage({
       subDir = 'portfolio';
     } else if (req.originalUrl.includes('/document')) {
       subDir = 'documents';
-    } else if (req.originalUrl.includes('/profile')) {
+    } else if (req.originalUrl.includes('/profile') || req.originalUrl.includes('/upload-profile-picture')) {
       subDir = 'profile';
     }
     
@@ -109,6 +119,13 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilt
       return cb(null, true);
     }
   }
+  // Check if it's a category image upload
+  else if (req.originalUrl.includes('/category/image') || req.originalUrl.includes('/admin/category')) {
+    // Allow only images for categories
+    if (allowedImageTypes.includes(ext)) {
+      return cb(null, true);
+    }
+  }
   // Check if it's a portfolio upload
   else if (req.originalUrl.includes('/portfolio')) {
     // Allow images, PDFs, and DOC files for portfolio
@@ -124,7 +141,7 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilt
     }
   } 
   // Profile picture uploads
-  else if (req.originalUrl.includes('/profile')) {
+  else if (req.originalUrl.includes('/profile') || req.originalUrl.includes('/upload-profile-picture')) {
     // Allow only images
     if (allowedImageTypes.includes(ext)) {
       return cb(null, true);
@@ -136,7 +153,7 @@ const fileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilt
 
 // Configure limits
 const limits = {
-  fileSize: 10 * 1024 * 1024, // 10MB max file size
+  fileSize: 300 * 1024 * 1024, // 300MB max file size
 };
 
 // Create multer upload middleware
@@ -162,6 +179,11 @@ export const getFileUrl = (req: Request, file: Express.Multer.File): string => {
     }
     return `/uploads/chat/${file.filename}`;
   }
+  
+  // Check if this is a category image upload
+  if (req.originalUrl.includes('/category/image') || req.originalUrl.includes('/admin/category')) {
+    return `/uploads/category/${file.filename}`;
+  }
 
   // For authenticated requests, use user-specific paths
   const userId = req.user?.id;
@@ -177,7 +199,7 @@ export const getFileUrl = (req: Request, file: Express.Multer.File): string => {
     subDir = 'portfolio';
   } else if (req.originalUrl.includes('/document')) {
     subDir = 'documents';
-  } else if (req.originalUrl.includes('/profile')) {
+  } else if (req.originalUrl.includes('/profile') || req.originalUrl.includes('/upload-profile-picture')) {
     subDir = 'profile';
   }
   

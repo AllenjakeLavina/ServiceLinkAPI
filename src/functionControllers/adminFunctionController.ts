@@ -380,3 +380,93 @@ export const getUnverifiedProviders = async () => {
     throw error;
   }
 };
+
+export const createCategory = async (
+  name: string,
+  description?: string,
+  imageUrl?: string
+) => {
+  try {
+    // Check if category already exists
+    const existingCategory = await prisma.category.findUnique({
+      where: { name }
+    });
+
+    if (existingCategory) {
+      throw new Error('Category with this name already exists');
+    }
+
+    // Create category
+    const newCategory = await prisma.category.create({
+      data: {
+        name,
+        description,
+        imageUrl
+      }
+    });
+
+    return newCategory;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Get all categories
+export const getAllCategories = async () => {
+  try {
+    const categories = await prisma.category.findMany({
+      orderBy: {
+        name: 'asc'
+      }
+    });
+    
+    return categories;
+  } catch (error) {
+    throw error;
+  }
+};
+
+// Edit an existing category
+export const editCategory = async (
+  categoryId: string,
+  updateData: {
+    name?: string;
+    description?: string;
+    imageUrl?: string;
+  }
+) => {
+  try {
+    // Check if category exists
+    const existingCategory = await prisma.category.findUnique({
+      where: { id: categoryId }
+    });
+
+    if (!existingCategory) {
+      throw new Error('Category not found');
+    }
+
+    // Check if name is being updated and if it's already in use
+    if (updateData.name && updateData.name !== existingCategory.name) {
+      const categoryWithSameName = await prisma.category.findFirst({
+        where: { 
+          name: updateData.name,
+          id: { not: categoryId } // Exclude the current category
+        }
+      });
+
+      if (categoryWithSameName) {
+        throw new Error('Another category with this name already exists');
+      }
+    }
+
+    // Update category
+    const updatedCategory = await prisma.category.update({
+      where: { id: categoryId },
+      data: updateData
+    });
+
+    return updatedCategory;
+  } catch (error) {
+    throw error;
+  }
+};

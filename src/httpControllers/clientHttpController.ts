@@ -505,8 +505,14 @@ export const handleProcessPayment = async (req: Request, res: Response) => {
       return;
     }
 
+    // Get payment proof file path if file was uploaded
+    let paymentProofUrl = undefined;
+    if (req.file) {
+      paymentProofUrl = `/uploads/${req.file.filename}`; // Store relative path
+    }
+
     // Process the payment
-    const result = await processPayment(userId, bookingId);
+    const result = await processPayment(userId, bookingId, paymentProofUrl);
 
     res.status(200).json({
       success: true,
@@ -704,7 +710,9 @@ export const createReviewController = async (req: Request, res: Response) => {
       return;
     }
 
-    if (!rating || rating < 1 || rating > 5) {
+    // Convert rating to float and validate
+    const ratingFloat = parseFloat(rating);
+    if (isNaN(ratingFloat) || ratingFloat < 1 || ratingFloat > 5) {
       res.status(400).json({
         success: false,
         message: 'Rating is required and must be between 1 and 5'
@@ -712,7 +720,17 @@ export const createReviewController = async (req: Request, res: Response) => {
       return;
     }
 
-    const review = await createReview(userId, bookingId, { rating, comment });
+    // Process uploaded images
+    let imageUrls: string[] = [];
+    if (req.files && Array.isArray(req.files)) {
+      imageUrls = (req.files as Express.Multer.File[]).map(file => `/uploads/${file.filename}`);
+    }
+
+    const review = await createReview(userId, bookingId, { 
+      rating: ratingFloat,
+      comment,
+      imageUrls: imageUrls.length > 0 ? imageUrls : undefined
+    });
     
     res.status(201).json({
       success: true,

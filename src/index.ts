@@ -9,7 +9,7 @@ import path from 'path';
 import { configureStaticFileServing } from './middlewares/fileHandler';
 import http from 'http';
 import { setupSocketServer } from './server/socketServer';
-
+import os from 'os';
 const app = express();
 export const prisma = new PrismaClient();
 
@@ -19,10 +19,15 @@ const server = http.createServer(app);
 // Middleware
 app.use(express.json());
 app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin:  '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
+
+// Increase payload size limit for file uploads
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Configure static file serving for uploads
 configureStaticFileServing(app);
@@ -68,12 +73,32 @@ app.get('/', (req: Request, res: Response) => {
 
 const PORT: number = 5500;
 const HOST: string = '0.0.0.0';
-
+// Function to get all local IP addresses
+function getAllLocalIpAddresses(): string[] {
+  const addresses: string[] = [];
+  const networks = os.networkInterfaces();
+  
+  for (const name of Object.keys(networks)) {
+    for (const net of networks[name] || []) {
+      // Only get IPv4 addresses and skip internal ones
+      if (net.family === 'IPv4' && !net.internal) {
+        addresses.push(net.address);
+      }
+    }
+  }
+  return addresses.length ? addresses : ['localhost'];
+}
 // Setup Socket.IO server
 setupSocketServer(server);
 
 // Start the server
 server.listen(PORT, (): void => {
-  console.log(`🚀 Server is running at http://${HOST}:${PORT}`);
+  const localIPs = getAllLocalIpAddresses();
+  console.log(`🚀 Server is running at:`);
+  console.log(`   Local:    http://localhost:${PORT}`);
+  console.log(`   Network addresses:`);
+  localIPs.forEach((ip, index) => {
+    console.log(`   ${index + 1}. http://${ip}:${PORT}`);
+  });
   console.log(`🔌 WebSocket server is running on the same port`);
 });

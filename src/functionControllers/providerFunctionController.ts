@@ -189,7 +189,12 @@ export const getProviderProfile = async (userId: string) => {
             workExperience: true,
             education: true,
             skills: true,
-            portfolio: true,
+            portfolio: {
+              include: {
+                files: true // Include portfolio files
+              }
+            },
+            documents: true, // Include documents
             services: {
               include: {
                 skills: true
@@ -504,6 +509,160 @@ export const createService = async (
   }
 };
 
+export const getProviderServices = async (userId: string) => {
+  try {
+    // Find user by id
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { serviceProvider: true }
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    if (!user.serviceProvider) {
+      throw new Error('Provider profile not found');
+    }
+
+    // Get all services for this provider
+    const services = await prisma.service.findMany({
+      where: {
+        serviceProviderId: user.serviceProvider.id
+      },
+      include: {
+        category: true,
+        skills: true
+      },
+      orderBy: {
+        createdAt: 'desc'
+      }
+    });
+
+    return services;
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const updateProviderService = async (
+  userId: string,
+  serviceId: string,
+  serviceData: {
+    title?: string;
+    description?: string;
+    categoryId?: string;
+    pricing?: number;
+    pricingType?: 'HOURLY' | 'FIXED' | 'DAILY' | 'SESSION';
+    imageUrls?: string[];
+    isActive?: boolean;
+    skillIds?: string[];
+  }
+) => {
+  try {
+    // Find user by id
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { serviceProvider: true }
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    if (!user.serviceProvider) {
+      throw new Error('Provider profile not found');
+    }
+
+    // Find the service and ensure it belongs to this provider
+    const service = await prisma.service.findFirst({
+      where: {
+        id: serviceId,
+        serviceProviderId: user.serviceProvider.id
+      },
+      include: {
+        skills: true
+      }
+    });
+
+    if (!service) {
+      throw new Error('Service not found or not authorized');
+    }
+
+    // Check if category exists if provided
+    if (serviceData.categoryId) {
+      const category = await prisma.category.findUnique({
+        where: { id: serviceData.categoryId }
+      });
+
+      if (!category) {
+        throw new Error('Category not found');
+      }
+    }
+
+    // Prepare data for service update
+    const updateData: any = {};
+    
+    if (serviceData.title !== undefined) updateData.title = serviceData.title;
+    if (serviceData.description !== undefined) updateData.description = serviceData.description;
+    if (serviceData.categoryId !== undefined) updateData.categoryId = serviceData.categoryId;
+    if (serviceData.pricing !== undefined) updateData.pricing = serviceData.pricing;
+    if (serviceData.pricingType !== undefined) updateData.pricingType = serviceData.pricingType;
+    if (serviceData.imageUrls !== undefined) {
+      updateData.imageUrls = serviceData.imageUrls ? JSON.stringify(serviceData.imageUrls) : null;
+    }
+    if (serviceData.isActive !== undefined) updateData.isActive = serviceData.isActive;
+
+    // Update the service
+    const updatedService = await prisma.service.update({
+      where: { id: serviceId },
+      data: updateData,
+      include: {
+        category: true,
+        skills: true
+      }
+    });
+
+    // Update skills if provided
+    if (serviceData.skillIds !== undefined) {
+      // First disconnect all existing skills
+      await prisma.service.update({
+        where: { id: serviceId },
+        data: {
+          skills: {
+            disconnect: service.skills.map(skill => ({ id: skill.id }))
+          }
+        }
+      });
+
+      // Then connect new skills if there are any
+      if (serviceData.skillIds.length > 0) {
+        await prisma.service.update({
+          where: { id: serviceId },
+          data: {
+            skills: {
+              connect: serviceData.skillIds.map(id => ({ id }))
+            }
+          }
+        });
+      }
+
+      // Fetch the service again with updated skills
+      return await prisma.service.findUnique({
+        where: { id: serviceId },
+        include: {
+          category: true,
+          skills: true
+        }
+      });
+    }
+
+    return updatedService;
+  } catch (error) {
+    throw error;
+  }
+};
+
 export const getCategories = async () => {
   try {
     const categories = await prisma.category.findMany();
@@ -663,7 +822,8 @@ export const getProviderBookings = async (
           }
         },
         address: true,
-        timeRecords: true
+        timeRecords: true,
+        payment: true
       },
       orderBy: {
         startTime: 'desc'
@@ -990,13 +1150,32 @@ export const completeService = async (userId: string, bookingId: string) => {
     // Get the active time record (without an end time)
     const activeTimeRecord = booking.timeRecords.find(record => !record.endTime);
     
+    let timeRecordToUpdate;
+    
     if (!activeTimeRecord) {
-      throw new Error('No active time record found for this booking');
+      // Create a new time record if none exists
+      console.log('No active time record found, creating one now...');
+      
+      // Create with start time of 1 hour ago as a fallback
+      const defaultStartTime = new Date();
+      defaultStartTime.setHours(defaultStartTime.getHours() - 1);
+      
+      // Create a new time record
+      timeRecordToUpdate = await prisma.timeRecord.create({
+        data: {
+          serviceBookingId: bookingId,
+          startTime: defaultStartTime,
+        }
+      });
+      
+      console.log('Created new time record:', timeRecordToUpdate);
+    } else {
+      timeRecordToUpdate = activeTimeRecord;
     }
 
     // Calculate end time, duration, and total amount
     const endTime = new Date();
-    const startTime = new Date(activeTimeRecord.startTime);
+    const startTime = new Date(timeRecordToUpdate.startTime);
     const durationHours = (endTime.getTime() - startTime.getTime()) / (1000 * 60 * 60); // in hours
     
     // Calculate total amount based on pricing type
@@ -1013,7 +1192,7 @@ export const completeService = async (userId: string, bookingId: string) => {
     const result = await prisma.$transaction(async (tx) => {
       // Update the time record with end time and duration
       const updatedTimeRecord = await tx.timeRecord.update({
-        where: { id: activeTimeRecord.id },
+        where: { id: timeRecordToUpdate.id },
         data: {
           endTime,
           duration: durationHours
@@ -1435,13 +1614,12 @@ export const createClientReview = async (
   // Check if a review already exists for this booking
   const existingReview = await prisma.review.findFirst({
     where: {
-      giverId: user.id,
-      receiverId: booking.client.user.id
+      serviceBookingId: bookingId
     }
   });
 
   if (existingReview) {
-    throw new Error('You have already reviewed this client');
+    throw new Error('You have already reviewed this booking');
   }
 
   // Create a new review
@@ -1450,7 +1628,8 @@ export const createClientReview = async (
       rating: reviewData.rating,
       comment: reviewData.comment,
       giverId: user.id,
-      receiverId: booking.client.user.id
+      receiverId: booking.client.user.id,
+      serviceBookingId: bookingId
     }
   });
 

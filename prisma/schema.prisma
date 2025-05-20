@@ -317,6 +317,9 @@ model ServiceBooking {
 
   // Contract related to this booking
   contract          Contract?
+  
+  // Reviews for this booking
+  reviews           Review[]
 }
 
 enum BookingStatus {
@@ -387,6 +390,7 @@ model Payment {
   paymentDate      DateTime?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
+  paymentProofUrl  String?      // Store the payment proof file path
 }
 
 enum PaymentStatus {
@@ -416,6 +420,7 @@ model Review {
   rating         Float     // e.g., 1-5 stars
   comment        String?   @db.Text
   createdAt      DateTime  @default(now())
+  imageUrls      String?   @db.Text // Store image file paths as JSON array
   
   // Who gave the review
   giverId        String
@@ -424,6 +429,10 @@ model Review {
   // Who received the review
   receiverId     String
   receiver       User      @relation("ReviewReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  // Link to the specific booking
+  serviceBookingId String?
+  serviceBooking   ServiceBooking? @relation(fields: [serviceBookingId], references: [id])
 }
 
 // Notification model

@@ -737,7 +737,8 @@ export const cancelBooking = async (userId: string, bookingId: string) => {
 
 export const processPayment = async (
   userId: string,
-  bookingId: string
+  bookingId: string,
+  paymentProofUrl?: string
 ) => {
   try {
     // Find client by userId
@@ -782,7 +783,8 @@ export const processPayment = async (
       amount: booking.totalAmount || booking.service.pricing,
       status: 'PENDING' as const,
       paymentMethod: 'CASH',
-      paymentDate: new Date()
+      paymentDate: new Date(),
+      paymentProofUrl // Store the payment proof file path
     };
 
     let payment;
@@ -820,7 +822,8 @@ export const processPayment = async (
           bookingId: booking.id,
           serviceId: booking.service.id,
           paymentMethod: 'CASH',
-          amount: paymentData.amount.toString()
+          amount: paymentData.amount.toString(),
+          paymentProofUrl // Include payment proof path in notification
         })
       }
     });
@@ -1122,6 +1125,7 @@ export const createReview = async (
   reviewData: {
     rating: number;
     comment?: string;
+    imageUrls?: string[]; // Add support for image paths
   }
 ) => {
   // Get the user with client information
@@ -1164,22 +1168,23 @@ export const createReview = async (
   // Check if a review already exists for this booking
   const existingReview = await prisma.review.findFirst({
     where: {
-      giverId: user.id,
-      receiverId: booking.serviceProvider.user.id
+      serviceBookingId: bookingId
     }
   });
 
   if (existingReview) {
-    throw new Error('You have already reviewed this service provider');
+    throw new Error('You have already reviewed this booking');
   }
 
-  // Create a new review
+  // Create a new review with images
   const review = await prisma.review.create({
     data: {
       rating: reviewData.rating,
       comment: reviewData.comment,
+      imageUrls: reviewData.imageUrls ? JSON.stringify(reviewData.imageUrls) : null,
       giverId: user.id,
-      receiverId: booking.serviceProvider.user.id
+      receiverId: booking.serviceProvider.user.id,
+      serviceBookingId: booking.id // Link the review to the specific booking
     }
   });
 
@@ -1212,7 +1217,8 @@ export const createReview = async (
       data: JSON.stringify({
         bookingId: booking.id,
         serviceId: booking.serviceId,
-        reviewId: review.id
+        reviewId: review.id,
+        imageUrls: reviewData.imageUrls // Include image paths in notification
       }),
       isRead: false
     }
@@ -1258,6 +1264,18 @@ export const getReviewsGiven = async (userId: string) => {
           firstName: true,
           lastName: true,
           profilePicture: true
+        }
+      },
+      serviceBooking: {
+        select: {
+          id: true,
+          title: true,
+          service: {
+            select: {
+              title: true,
+              id: true
+            }
+          }
         }
       }
     },

@@ -7,7 +7,10 @@ import {
   changeUserPassword,
   getUnverifiedProviders,
   verifyProviderAccount,
-  rejectProviderVerification
+  rejectProviderVerification,
+  createCategory,
+  getAllCategories,
+  editCategory
 } from '../functionControllers/adminFunctionController';
 
 export const handleSetPassword = async (req: Request, res: Response) => {
@@ -274,6 +277,146 @@ export const handleRejectProviderVerification = async (req: Request, res: Respon
     });
     return;
   } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    res.status(400).json({
+      success: false,
+      message: errorMessage
+    });
+    return;
+  }
+};
+
+export const handleCreateCategory = async (req: Request, res: Response) => {
+  try {
+    // Check if user has admin role
+    if (req.user.role !== 'ADMIN') {
+      res.status(403).json({
+        success: false,
+        message: 'Unauthorized: Only admins can perform this action'
+      });
+      return;
+    }
+
+    const { name, description } = req.body;
+    
+    // Validate required fields
+    if (!name) {
+      res.status(400).json({
+        success: false,
+        message: 'Category name is required'
+      });
+      return;
+    }
+
+    // Get image URL from file upload if it exists
+    let imageUrl;
+    if (req.file) {
+      console.log('File uploaded:', req.file);
+      imageUrl = `/uploads/category/${req.file.filename}`;
+    }
+
+    console.log('Creating category with image URL:', imageUrl);
+    const category = await createCategory(name, description, imageUrl);
+
+    res.status(201).json({
+      success: true,
+      message: 'Category created successfully',
+      data: category
+    });
+    return;
+  } catch (error) {
+    console.error('Error in handleCreateCategory:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    res.status(400).json({
+      success: false,
+      message: errorMessage
+    });
+    return;
+  }
+};
+
+export const handleGetAllCategories = async (req: Request, res: Response) => {
+  try {
+    // Check if user has admin role
+    if (req.user.role !== 'ADMIN') {
+      res.status(403).json({
+        success: false,
+        message: 'Unauthorized: Only admins can perform this action'
+      });
+      return;
+    }
+
+    const categories = await getAllCategories();
+
+    res.status(200).json({
+      success: true,
+      data: categories
+    });
+    return;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    res.status(400).json({
+      success: false,
+      message: errorMessage
+    });
+    return;
+  }
+};
+
+export const handleEditCategory = async (req: Request, res: Response) => {
+  try {
+    // Check if user has admin role
+    if (req.user.role !== 'ADMIN') {
+      res.status(403).json({
+        success: false,
+        message: 'Unauthorized: Only admins can perform this action'
+      });
+      return;
+    }
+
+    const { categoryId } = req.params;
+    const { name, description } = req.body;
+    
+    // Validate required fields
+    if (!categoryId) {
+      res.status(400).json({
+        success: false,
+        message: 'Category ID is required'
+      });
+      return;
+    }
+
+    // Prepare update data
+    const updateData: { name?: string; description?: string; imageUrl?: string } = {};
+    
+    if (name !== undefined) updateData.name = name;
+    if (description !== undefined) updateData.description = description;
+
+    // Handle image update if file was uploaded
+    if (req.file) {
+      updateData.imageUrl = `/uploads/category/${req.file.filename}`;
+      console.log('Updated category image:', updateData.imageUrl);
+    }
+
+    // If no update data provided, return error
+    if (Object.keys(updateData).length === 0) {
+      res.status(400).json({
+        success: false,
+        message: 'No update data provided'
+      });
+      return;
+    }
+
+    const updatedCategory = await editCategory(categoryId, updateData);
+
+    res.status(200).json({
+      success: true,
+      message: 'Category updated successfully',
+      data: updatedCategory
+    });
+    return;
+  } catch (error) {
+    console.error('Error in handleEditCategory:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     res.status(400).json({
       success: false,

@@ -121,6 +121,64 @@
         .provider-actions button {
             margin-bottom: 5px;
         }
+        
+        /* Modal styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            overflow: auto;
+        }
+        
+        .modal-content {
+            background-color: #fefefe;
+            margin: 10% auto;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+            width: 80%;
+            max-width: 600px;
+            position: relative;
+        }
+        
+        .close-button {
+            position: absolute;
+            top: 10px;
+            right: 15px;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .btn-edit {
+            background-color: #f39c12;
+            color: white;
+        }
+        
+        .btn-edit:hover {
+            background-color: #e67e22;
+        }
+        
+        .btn-save {
+            background-color: #2196F3;
+            color: white;
+        }
+        
+        .btn-cancel {
+            background-color: #ccc;
+        }
     </style>
 </head>
 <body>
@@ -148,6 +206,7 @@
             <div class="tab" data-tab="all-providers">All Providers</div>
             <div class="tab" data-tab="all-clients">All Clients</div>
             <div class="tab" data-tab="user-management">User Management</div>
+            <div class="tab" data-tab="category-management">Category Management</div>
         </div>
 
         <!-- Unverified Providers Tab -->
@@ -199,6 +258,66 @@
                 <div id="password-change-result" class="result"></div>
             </div>
         </div>
+
+        <!-- Category Management Tab -->
+        <div id="category-management" class="tab-content">
+            <div class="card">
+                <h2>Create New Category</h2>
+                <form id="create-category-form">
+                    <div class="form-group">
+                        <label for="category-name">Category Name:</label>
+                        <input type="text" id="category-name" placeholder="Enter category name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="category-description">Description:</label>
+                        <textarea id="category-description" placeholder="Enter category description" rows="3" style="width: 100%"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="category-image">Category Image:</label>
+                        <input type="file" id="category-image" accept="image/*">
+                    </div>
+                    <button type="submit">Create Category</button>
+                </form>
+                <div id="category-result" class="result"></div>
+            </div>
+            
+            <div class="card">
+                <h2>Existing Categories</h2>
+                <div id="categories-list">
+                    <div class="loading">Loading...</div>
+                </div>
+            </div>
+
+            <!-- Edit Category Modal -->
+            <div id="edit-category-modal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <span class="close-button" onclick="closeEditModal()">&times;</span>
+                    <h2>Edit Category</h2>
+                    <form id="edit-category-form">
+                        <input type="hidden" id="edit-category-id">
+                        <div class="form-group">
+                            <label for="edit-category-name">Category Name:</label>
+                            <input type="text" id="edit-category-name" placeholder="Enter category name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-category-description">Description:</label>
+                            <textarea id="edit-category-description" placeholder="Enter category description" rows="3" style="width: 100%"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="edit-category-image">Category Image:</label>
+                            <div id="current-category-image" style="margin-bottom: 10px"></div>
+                            <input type="file" id="edit-category-image" accept="image/*">
+                            <p><small>Leave empty to keep current image</small></p>
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" onclick="closeEditModal()" class="btn-cancel">Cancel</button>
+                            <button type="submit" class="btn-save">Save Changes</button>
+                        </div>
+                    </form>
+                    <div id="edit-category-result" class="result"></div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -247,6 +366,8 @@
                     loadAllProviders();
                 } else if (tabId === 'all-clients') {
                     loadAllClients();
+                } else if (tabId === 'category-management') {
+                    loadAllCategories();
                 }
             });
         });
@@ -516,6 +637,149 @@
             }
         });
         
+        // Load all categories
+        async function loadAllCategories() {
+            const token = localStorage.getItem('adminToken');
+            if (!token) return;
+            
+            const categoriesList = document.getElementById('categories-list');
+            categoriesList.innerHTML = '<div class="loading">Loading...</div>';
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/admin/category`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    if (!data.data || data.data.length === 0) {
+                        categoriesList.innerHTML = '<p>No categories found</p>';
+                        return;
+                    }
+                    
+                    let html = '<table style="width: 100%">';
+                    html += `
+                        <tr>
+                            <th>Name</th>
+                            <th>Description</th>
+                            <th>Image</th>
+                            <th>Actions</th>
+                        </tr>
+                    `;
+                    
+                    data.data.forEach(category => {
+                        const imageHtml = category.imageUrl 
+                            ? `<img src="${category.imageUrl}" width="50" height="50" alt="${category.name}">` 
+                            : 'No image';
+                        
+                        // Escape quotes in name and description to prevent JS errors
+                        const escapedName = category.name.replace(/"/g, '&quot;');
+                        const escapedDesc = category.description ? category.description.replace(/"/g, '&quot;') : '';
+                        const imageUrlAttr = category.imageUrl ? `data-image="${category.imageUrl}"` : '';
+                        
+                        html += `
+                            <tr>
+                                <td>${category.name}</td>
+                                <td>${category.description || 'No description'}</td>
+                                <td>${imageHtml}</td>
+                                <td>
+                                    <button class="btn btn-edit" 
+                                        data-id="${category.id}" 
+                                        data-name="${escapedName}" 
+                                        data-description="${escapedDesc}"
+                                        ${imageUrlAttr}
+                                        onclick="openEditCategoryModal(this)">
+                                        Edit
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    
+                    html += '</table>';
+                    categoriesList.innerHTML = html;
+                } else {
+                    categoriesList.innerHTML = `<p>Error: ${data.message}</p>`;
+                }
+            } catch (error) {
+                console.error('Error loading categories:', error);
+                categoriesList.innerHTML = '<p>Failed to load categories</p>';
+            }
+        }
+        
+        // Create Category form submission
+        document.getElementById('create-category-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const token = localStorage.getItem('adminToken');
+            if (!token) {
+                alert('You must be logged in');
+                return;
+            }
+            
+            const resultElement = document.getElementById('category-result');
+            const nameInput = document.getElementById('category-name');
+            const descriptionInput = document.getElementById('category-description');
+            const imageInput = document.getElementById('category-image');
+            
+            if (!nameInput.value.trim()) {
+                resultElement.innerHTML = '<p style="color: red">Category name is required</p>';
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('name', nameInput.value.trim());
+            
+            if (descriptionInput.value.trim()) {
+                formData.append('description', descriptionInput.value.trim());
+            }
+            
+            if (imageInput.files && imageInput.files.length > 0) {
+                console.log('Image selected:', imageInput.files[0].name);
+                formData.append('categoryImage', imageInput.files[0]);
+                
+                // Log formData contents for debugging
+                console.log('Form data entries:');
+                for (let [key, value] of formData.entries()) {
+                    console.log(key, ':', value instanceof File ? value.name : value);
+                }
+            } else {
+                console.log('No image selected');
+            }
+            
+            try {
+                resultElement.innerHTML = '<p>Creating category...</p>';
+                
+                const response = await fetch(`${API_BASE_URL}/admin/category`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultElement.innerHTML = '<p style="color: green">Category created successfully</p>';
+                    nameInput.value = '';
+                    descriptionInput.value = '';
+                    imageInput.value = '';
+                    
+                    // Reload categories list
+                    loadAllCategories();
+                } else {
+                    resultElement.innerHTML = `<p style="color: red">Error: ${data.message}</p>`;
+                }
+            } catch (error) {
+                console.error('Error creating category:', error);
+                resultElement.innerHTML = '<p style="color: red">Failed to create category</p>';
+            }
+        });
+        
         // Verify provider
         window.verifyProvider = async (providerId) => {
             const token = localStorage.getItem('adminToken');
@@ -583,6 +847,101 @@
                 alert('Failed to reject provider');
             }
         };
+        
+        // Open the Edit Category Modal
+        window.openEditCategoryModal = (btnElement) => {
+            // Get data from button element
+            const categoryId = btnElement.getAttribute('data-id');
+            const categoryName = btnElement.getAttribute('data-name');
+            const categoryDescription = btnElement.getAttribute('data-description');
+            const categoryImage = btnElement.getAttribute('data-image');
+            
+            // Set values in form
+            document.getElementById('edit-category-id').value = categoryId;
+            document.getElementById('edit-category-name').value = categoryName;
+            document.getElementById('edit-category-description').value = categoryDescription || '';
+            
+            // Display current image if exists
+            const currentImageContainer = document.getElementById('current-category-image');
+            if (categoryImage) {
+                currentImageContainer.innerHTML = `<img src="${categoryImage}" width="100" alt="Current image">`;
+            } else {
+                currentImageContainer.innerHTML = '<p>No current image</p>';
+            }
+            
+            // Clear any previous results
+            document.getElementById('edit-category-result').innerHTML = '';
+            
+            // Show the modal
+            document.getElementById('edit-category-modal').style.display = 'block';
+        };
+        
+        // Close the Edit Category Modal
+        window.closeEditModal = () => {
+            document.getElementById('edit-category-modal').style.display = 'none';
+        };
+        
+        // Handle Edit Category form submission
+        document.getElementById('edit-category-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const token = localStorage.getItem('adminToken');
+            if (!token) {
+                alert('You must be logged in');
+                return;
+            }
+            
+            const categoryId = document.getElementById('edit-category-id').value;
+            const resultElement = document.getElementById('edit-category-result');
+            const nameInput = document.getElementById('edit-category-name');
+            const descriptionInput = document.getElementById('edit-category-description');
+            const imageInput = document.getElementById('edit-category-image');
+            
+            if (!nameInput.value.trim()) {
+                resultElement.innerHTML = '<p style="color: red">Category name is required</p>';
+                return;
+            }
+            
+            const formData = new FormData();
+            formData.append('name', nameInput.value.trim());
+            
+            if (descriptionInput.value.trim()) {
+                formData.append('description', descriptionInput.value.trim());
+            }
+            
+            if (imageInput.files.length > 0) {
+                formData.append('categoryImage', imageInput.files[0]);
+            }
+            
+            try {
+                resultElement.innerHTML = '<p>Updating category...</p>';
+                
+                const response = await fetch(`${API_BASE_URL}/admin/category/${categoryId}`, {
+                    method: 'PATCH',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    resultElement.innerHTML = '<p style="color: green">Category updated successfully</p>';
+                    
+                    // Reload categories list after a short delay
+                    setTimeout(() => {
+                        loadAllCategories();
+                        closeEditModal();
+                    }, 1500);
+                } else {
+                    resultElement.innerHTML = `<p style="color: red">Error: ${data.message}</p>`;
+                }
+            } catch (error) {
+                console.error('Error updating category:', error);
+                resultElement.innerHTML = '<p style="color: red">Failed to update category</p>';
+            }
+        });
         
         // Initial check
         checkAuth();

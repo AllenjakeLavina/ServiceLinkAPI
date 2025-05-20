@@ -11,6 +11,9 @@ const transporter = nodemailer.createTransport({
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_APP_PASSWORD
+  },
+  tls: {
+    rejectUnauthorized: false
   }
 });
 
@@ -1021,6 +1024,9 @@ export const getUserConversations = async (userId: string) => {
           profilePicture: conv.user1ProfilePic
         };
 
+      // Determine if conversation is active based on booking status
+      const isActive = !conv.serviceBookingId || conv.bookingStatus !== 'COMPLETED';
+
       return {
         id: conv.id,
         otherUser,
@@ -1033,6 +1039,7 @@ export const getUserConversations = async (userId: string) => {
           title: conv.bookingTitle,
           status: conv.bookingStatus
         } : null,
+        isActive: isActive,
         createdAt: conv.createdAt,
         updatedAt: conv.updatedAt
       };
@@ -1049,14 +1056,20 @@ export const getConversationMessages = async (conversationId: string, userId: st
   try {
     // Verify the user is part of this conversation
     const conversation = await prisma.$queryRaw`
-      SELECT id FROM Conversation 
-      WHERE id = ${conversationId} 
-      AND (user1Id = ${userId} OR user2Id = ${userId})
+      SELECT c.id, c.serviceBookingId, sb.status as bookingStatus 
+      FROM Conversation c
+      LEFT JOIN ServiceBooking sb ON c.serviceBookingId = sb.id
+      WHERE c.id = ${conversationId} 
+      AND (c.user1Id = ${userId} OR c.user2Id = ${userId})
     `;
 
-    if (!(conversation as any[])[0]) {
+    const conv = (conversation as any[])[0];
+    if (!conv) {
       throw new Error('Conversation not found or access denied');
     }
+    
+    // Add booking status to the response
+    const isBookingCompleted = conv.bookingStatus === 'COMPLETED';
 
     // Get messages for this conversation
     const messages = await prisma.$queryRaw`
@@ -1079,8 +1092,8 @@ export const getConversationMessages = async (conversationId: string, userId: st
       AND isRead = false
     `;
 
-    // Process messages to format sender info
-    return (messages as any[]).map(msg => ({
+    // Add system message if booking is completed
+    let processedMessages = (messages as any[]).map(msg => ({
       id: msg.id,
       content: msg.content,
       imageUrl: msg.imageUrl,
@@ -1093,6 +1106,16 @@ export const getConversationMessages = async (conversationId: string, userId: st
         profilePicture: msg.senderProfilePic
       }
     }));
+    
+    // Return messages with booking status
+    return {
+      messages: processedMessages,
+      conversationStatus: {
+        isActive: !isBookingCompleted,
+        serviceBookingId: conv.serviceBookingId,
+        bookingStatus: conv.bookingStatus
+      }
+    };
   } catch (error) {
     console.error('Error getting conversation messages:', error);
     throw error;
@@ -1106,16 +1129,23 @@ export const sendMessage = async (
   imageUrl?: string
 ) => {
   try {
-    // Verify the conversation exists and user is part of it
+    // Verify the conversation exists and user is part of it, and check booking status
     const conversation = await prisma.$queryRaw`
-      SELECT user1Id, user2Id FROM Conversation 
-      WHERE id = ${conversationId} 
-      AND (user1Id = ${senderId} OR user2Id = ${senderId})
+      SELECT c.user1Id, c.user2Id, c.serviceBookingId, sb.status as bookingStatus
+      FROM Conversation c
+      LEFT JOIN ServiceBooking sb ON c.serviceBookingId = sb.id
+      WHERE c.id = ${conversationId} 
+      AND (c.user1Id = ${senderId} OR c.user2Id = ${senderId})
     `;
 
     const conv = (conversation as any[])[0];
     if (!conv) {
       throw new Error('Conversation not found or access denied');
+    }
+
+    // Check if the booking is completed - if so, prevent sending messages
+    if (conv.serviceBookingId && conv.bookingStatus === 'COMPLETED') {
+      throw new Error('This conversation is closed because the service booking has been completed');
     }
 
     // Determine the receiver (the other user in the conversation)
@@ -1157,6 +1187,277 @@ export const sendMessage = async (
     };
   } catch (error) {
     console.error('Error sending message:', error);
+    throw error;
+  }
+};
+
+export const getUserNotifications = async (userId: string, page: number = 1, limit: number = 10) => {
+  try {
+    console.log(`Getting notifications for user ID: ${userId}, page: ${page}, limit: ${limit}`);
+    const offset = (page - 1) * limit;
+    
+    // First, let's check if the user exists
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    
+    if (!user) {
+      console.error(`User with ID ${userId} not found`);
+      throw new Error('User not found');
+    }
+    
+    // Get notifications for this user with pagination
+    const notifications = await prisma.notification.findMany({
+      where: {
+        receiverId: userId
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      skip: offset,
+      take: limit + 1 // Take one extra to check if there are more
+    });
+
+    console.log(`Found ${notifications.length} notifications before hasMore check`);
+    
+    // Check if there are more notifications
+    const hasMore = notifications.length > limit;
+    const notificationsToReturn = hasMore ? notifications.slice(0, limit) : notifications;
+    
+    console.log(`Returning ${notificationsToReturn.length} notifications, hasMore: ${hasMore}`);
+
+    // Get total count
+    const totalCount = await prisma.notification.count({
+      where: {
+        receiverId: userId
+      }
+    });
+    
+    console.log(`Total notification count for user: ${totalCount}`);
+
+    return {
+      notifications: notificationsToReturn,
+      hasMore,
+      totalCount,
+      page,
+      limit
+    };
+  } catch (error) {
+    console.error('Error getting notifications:', error);
+    throw error;
+  }
+};
+
+export const getUnreadNotificationCount = async (userId: string) => {
+  try {
+    console.log(`Counting unread notifications for user ID: ${userId}`);
+    
+    // First, let's check if the user exists
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+    
+    if (!user) {
+      console.error(`User with ID ${userId} not found`);
+      throw new Error('User not found');
+    }
+    
+    // Let's check the total number of notifications in the system for debugging
+    const totalNotifications = await prisma.notification.count();
+    console.log(`Total notifications in system: ${totalNotifications}`);
+    
+    // Let's check all notifications for this user
+    const userNotifications = await prisma.notification.count({
+      where: {
+        receiverId: userId
+      }
+    });
+    console.log(`Total notifications for user: ${userNotifications}`);
+    
+    // Now get the unread count with explicit filtering
+    const count = await prisma.notification.count({
+      where: {
+        receiverId: userId,
+        isRead: false
+      }
+    });
+    
+    console.log(`Unread notifications for user: ${count}`);
+    
+    return count;
+  } catch (error) {
+    console.error('Error counting unread notifications:', error);
+    throw error;
+  }
+};
+
+export const markNotificationAsRead = async (userId: string, notificationId: string) => {
+  try {
+    // Verify the notification belongs to this user
+    const notification = await prisma.notification.findFirst({
+      where: {
+        id: notificationId,
+        receiverId: userId
+      }
+    });
+
+    if (!notification) {
+      throw new Error('Notification not found or does not belong to this user');
+    }
+
+    // Mark notification as read
+    const updatedNotification = await prisma.notification.update({
+      where: {
+        id: notificationId
+      },
+      data: {
+        isRead: true
+      }
+    });
+
+    return updatedNotification;
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+    throw error;
+  }
+};
+
+export const markAllNotificationsAsRead = async (userId: string) => {
+  try {
+    // Mark all notifications for this user as read
+    const result = await prisma.notification.updateMany({
+      where: {
+        receiverId: userId,
+        isRead: false
+      },
+      data: {
+        isRead: true
+      }
+    });
+
+    return {
+      count: result.count
+    };
+  } catch (error) {
+    console.error('Error marking all notifications as read:', error);
+    throw error;
+  }
+};
+
+export const updateProfilePicture = async (userId: string, profilePictureUrl: string) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId }
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Update user's profile picture
+    await prisma.user.update({
+      where: { id: userId },
+      data: { profilePicture: profilePictureUrl }
+    });
+
+    return { success: true, message: 'Profile picture updated successfully' };
+  } catch (error) {
+    throw error;
+  }
+};
+
+export const getCategoriesWithServices = async () => {
+  try {
+    // Get all categories
+    const categories = await prisma.category.findMany({
+      include: {
+        services: {
+          where: {
+            isActive: true,
+            serviceProvider: {
+              isProviderVerified: true
+            }
+          },
+          include: {
+            category: true,
+            skills: true,
+            serviceProvider: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    firstName: true,
+                    lastName: true,
+                    profilePicture: true,
+                    receivedReviews: {
+                      select: {
+                        rating: true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          take: 5 // Limit to 5 services per category for the overview
+        }
+      },
+      orderBy: {
+        name: 'asc'
+      }
+    });
+
+    // Process the categories and their services
+    const processedCategories = categories.map(category => {
+      // Process services for each category
+      const processedServices = category.services.map(service => {
+        // Calculate average rating
+        const reviews = service.serviceProvider.user.receivedReviews;
+        const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
+        const averageRating = reviews.length > 0 ? totalRating / reviews.length : null;
+        const reviewCount = reviews.length;
+
+        // Parse image URLs
+        let imageUrls: string[] = [];
+        if (service.imageUrls) {
+          try {
+            imageUrls = JSON.parse(service.imageUrls);
+          } catch (error) {
+            console.warn(`Error parsing image URLs for service ${service.id}:`, error);
+          }
+        }
+
+        return {
+          id: service.id,
+          title: service.title,
+          description: service.description,
+          pricing: service.pricing,
+          pricingType: service.pricingType,
+          imageUrls,
+          skills: service.skills,
+          provider: {
+            id: service.serviceProvider.id,
+            name: `${service.serviceProvider.user.firstName} ${service.serviceProvider.user.lastName}`,
+            profilePicture: service.serviceProvider.user.profilePicture,
+            rating: averageRating,
+            reviewCount
+          }
+        };
+      });
+
+      // Ensure the imageUrl is included in the returned category
+      return {
+        id: category.id,
+        name: category.name,
+        description: category.description,
+        imageUrl: category.imageUrl || null, // Ensure even null is returned explicitly
+        serviceCount: category.services.length,
+        services: processedServices
+      };
+    });
+
+    return processedCategories;
+  } catch (error) {
     throw error;
   }
 };

@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 import { loginUser, changePassword, getUserById, verifyEmailCode, resendVerificationCode, 
     forgotPassword, resetPassword, getAllServices, getServiceDetails, searchProviders, getProviderDetails,
-    getUserConversations, getConversationMessages, sendMessage } from '../functionControllers/allRoleFunctionController';
+    getUserConversations, getConversationMessages, sendMessage, 
+    getUserNotifications, getUnreadNotificationCount, markNotificationAsRead, markAllNotificationsAsRead, updateProfilePicture, getCategoriesWithServices } from '../functionControllers/allRoleFunctionController';
 import { createProviderVerificationNotification } from '../functionControllers/providerFunctionController';
 import { getFileUrl } from '../middlewares/fileHandler';
 
@@ -453,11 +454,11 @@ export const handleGetConversationMessages = async (req: Request, res: Response)
       return;
     }
 
-    const messages = await getConversationMessages(conversationId, userId);
+    const result = await getConversationMessages(conversationId, userId);
 
     res.status(200).json({
       success: true,
-      data: messages
+      data: result
     });
     return;
   } catch (error) {
@@ -500,13 +501,26 @@ export const handleSendMessage = async (req: Request, res: Response) => {
       return;
     }
 
-    const message = await sendMessage(conversationId, userId, content || '', imageUrl);
+    try {
+      const message = await sendMessage(conversationId, userId, content || '', imageUrl);
 
-    res.status(201).json({
-      success: true,
-      message: 'Message sent successfully',
-      data: message
-    });
+      res.status(201).json({
+        success: true,
+        message: 'Message sent successfully',
+        data: message
+      });
+    } catch (error) {
+      // Handle specific error for completed bookings
+      if (error instanceof Error && error.message.includes('booking has been completed')) {
+        res.status(403).json({
+          success: false,
+          message: error.message
+        });
+      } else {
+        throw error;
+      }
+    }
+    
     return;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
@@ -558,6 +572,228 @@ export const handleUploadImage = async (req: Request, res: Response) => {
       message: errorMessage
     });
     return;
+  }
+};
+
+export const handleGetNotifications = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user.id;
+    
+    console.log('GET /notifications - Request received');
+    console.log('User from token:', req.user);
+    console.log('Using userId:', userId);
+    console.log('Query parameters:', req.query);
+    
+    if (!userId) {
+      console.error('No user ID found in token');
+      res.status(400).json({
+        success: false,
+        message: 'User ID not found in token'
+      });
+      return;
+    }
+    
+    // Get pagination parameters with proper validation
+    let page = 1;
+    let limit = 10;
+
+    if (req.query.page) {
+      const pageParam = parseInt(req.query.page as string);
+      if (!isNaN(pageParam) && pageParam > 0) {
+        page = pageParam;
+      }
+    }
+    
+    if (req.query.limit) {
+      const limitParam = parseInt(req.query.limit as string);
+      if (!isNaN(limitParam) && limitParam > 0) {
+        limit = Math.min(limitParam, 50); // Cap at 50 to prevent excessive loads
+      }
+    }
+    
+    console.log(`Using pagination: page=${page}, limit=${limit}`);
+
+    const result = await getUserNotifications(userId, page, limit);
+    console.log('Notification result summary:', {
+      totalCount: result.totalCount,
+      hasMore: result.hasMore,
+      returningCount: result.notifications.length
+    });
+
+    res.status(200).json({
+      success: true,
+      data: result
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    console.error('Error in handleGetNotifications:', error);
+    res.status(400).json({
+      success: false,
+      message: errorMessage
+    });
+  }
+};
+
+export const handleGetNotificationCount = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user.id;
+    
+    console.log('GET /notifications/count - Request received');
+    console.log('User from token:', req.user);
+    console.log('Using userId:', userId);
+    
+    if (!userId) {
+      console.error('No user ID found in token');
+      res.status(400).json({
+        success: false,
+        message: 'User ID not found in token'
+      });
+      return;
+    }
+
+    const count = await getUnreadNotificationCount(userId);
+    console.log('Notification count result:', count);
+
+    res.status(200).json({
+      success: true,
+      data: { count }
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    console.error('Error in handleGetNotificationCount:', error);
+    res.status(400).json({
+      success: false,
+      message: errorMessage
+    });
+  }
+};
+
+export const handleMarkNotificationRead = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user.id;
+    const { notificationId } = req.params;
+    
+    if (!userId) {
+      res.status(400).json({
+        success: false,
+        message: 'User ID not found in token'
+      });
+      return;
+    }
+
+    if (!notificationId) {
+      res.status(400).json({
+        success: false,
+        message: 'Notification ID is required'
+      });
+      return;
+    }
+
+    const result = await markNotificationAsRead(userId, notificationId);
+
+    res.status(200).json({
+      success: true,
+      message: 'Notification marked as read',
+      data: result
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    res.status(400).json({
+      success: false,
+      message: errorMessage
+    });
+  }
+};
+
+export const handleMarkAllNotificationsRead = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user.id;
+    
+    if (!userId) {
+      res.status(400).json({
+        success: false,
+        message: 'User ID not found in token'
+      });
+      return;
+    }
+
+    const result = await markAllNotificationsAsRead(userId);
+
+    res.status(200).json({
+      success: true,
+      message: 'All notifications marked as read',
+      data: result
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    res.status(400).json({
+      success: false,
+      message: errorMessage
+    });
+  }
+};
+
+export const handleUploadProfilePicture = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user.id;
+    
+    if (!userId) {
+      res.status(400).json({
+        success: false,
+        message: 'User ID not found in token'
+      });
+      return;
+    }
+
+    // Check if file was uploaded
+    if (!req.file) {
+      console.error('No profile picture file found in request:', req.body);
+      res.status(400).json({
+        success: false,
+        message: 'Profile picture file is required'
+      });
+      return;
+    }
+
+    // Get the URL for the uploaded file
+    const fileUrl = getFileUrl(req, req.file);
+    console.log('Profile picture uploaded successfully:', fileUrl);
+
+    // Update the user's profile picture in the database
+    const updatedUser = await updateProfilePicture(userId, fileUrl);
+
+    res.status(200).json({
+      success: true,
+      message: 'Profile picture updated successfully',
+      data: {
+        profilePicture: fileUrl
+      }
+    });
+  } catch (error) {
+    console.error('Error in upload profile picture handler:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    res.status(400).json({
+      success: false,
+      message: errorMessage
+    });
+  }
+};
+
+export const handleGetCategoriesWithServices = async (req: Request, res: Response) => {
+  try {
+    const categoriesWithServices = await getCategoriesWithServices();
+    
+    res.status(200).json({
+      success: true,
+      data: categoriesWithServices
+    });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    console.error('Error getting categories with services:', error);
+    res.status(500).json({
+      success: false,
+      message: errorMessage
+    });
   }
 };
   

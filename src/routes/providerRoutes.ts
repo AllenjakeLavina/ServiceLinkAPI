@@ -10,6 +10,8 @@ import {
   handleAddPortfolioWithFiles,
   handleAddDocument,
   handleCreateService,
+  handleGetProviderServices,
+  handleUpdateProviderService,
   handleGetCategories,
   handleGetVerificationStatus,
   handleGetProviderBookings,
@@ -41,7 +43,7 @@ router.get('/categories', handleGetCategories);
 // Protected routes - require authentication
 router.get('/profile', authenticateToken, handleGetProviderProfile);
 router.get('/verification-status', authenticateToken, handleGetVerificationStatus);
-router.patch('/profile', authenticateToken, handleUpdateProviderProfile);
+router.patch('/profile', authenticateToken, uploadFile.single('profilePicture'), handleUpdateProviderProfile);
 router.post('/experience', authenticateToken, handleAddWorkExperience);
 router.post('/education', authenticateToken, handleAddEducation);
 router.post('/skill', authenticateToken, handleAddSkill);
@@ -67,6 +69,8 @@ router.post(
 
 // Routes requiring verification - provider must be verified by admin
 router.post('/service', authenticateToken, checkProviderVerification, handleCreateService);
+router.get('/services', authenticateToken, handleGetProviderServices);
+router.put('/services/:serviceId', authenticateToken, handleUpdateProviderService);
 
 // Booking management routes
 router.get('/bookings', authenticateToken, handleGetProviderBookings);

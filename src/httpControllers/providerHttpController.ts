@@ -5,7 +5,7 @@ import { registerProvider, updateProviderProfile, getProviderProfile, addWorkExp
   getProviderBookings, getProviderBookingDetails, acceptBooking, declineBooking, startService, completeService,
   getContractDetails, createContract, updateContract, signContract,
   createClientReview, getReviewsReceived, getReviewsGiven, getServiceProviderReviews,
-  addAvailabilitySlot, getAvailability, updateAvailabilitySlot, deleteAvailabilitySlot } from '../functionControllers/providerFunctionController';
+  addAvailabilitySlot, getAvailability, updateAvailabilitySlot, deleteAvailabilitySlot, getProviderServices, updateProviderService } from '../functionControllers/providerFunctionController';
 import { uploadFile, getFileUrl } from '../middlewares/fileHandler';
 import multer from 'multer';
 import express from 'express';
@@ -67,6 +67,12 @@ export const handleUpdateProviderProfile = async (req: Request, res: Response) =
     // Get the user ID from the JWT token
     const userId = req.user.id;
     
+    console.log('Update provider profile request received:', {
+      userId,
+      body: req.body,
+      file: req.file
+    });
+    
     if (!userId) {
       res.status(400).json({
         success: false,
@@ -75,19 +81,26 @@ export const handleUpdateProviderProfile = async (req: Request, res: Response) =
       return;
     }
 
-    const { firstName, lastName, phone, profilePicture, bio, headline, hourlyRate } = req.body;
-    
-    // At least one field should be updated
-    if (!firstName && !lastName && !phone && !profilePicture && 
-        bio === undefined && headline === undefined && hourlyRate === undefined) {
-      res.status(400).json({
-        success: false,
-        message: 'At least one field is required for update'
-      });
-      return;
+    // Handle file upload if present
+    let profilePicture = req.body.profilePicture;
+    if (req.file) {
+      console.log('Profile picture file detected in request');
+      profilePicture = getFileUrl(req, req.file);
+      console.log('Generated profile picture URL:', profilePicture);
     }
 
-    const updatedUser = await updateProviderProfile(userId, {
+    // Extract fields from request body
+    const { firstName, lastName, phone, bio, headline, hourlyRate } = req.body;
+    
+    const updateData: {
+      firstName?: string;
+      lastName?: string;
+      phone?: string;
+      profilePicture?: string;
+      bio?: string;
+      headline?: string;
+      hourlyRate?: number;
+    } = {
       firstName,
       lastName,
       phone,
@@ -95,7 +108,30 @@ export const handleUpdateProviderProfile = async (req: Request, res: Response) =
       bio,
       headline,
       hourlyRate: hourlyRate ? parseFloat(hourlyRate) : undefined
+    };
+    
+    console.log('Filtered update data:', updateData);
+    
+    // Remove undefined values
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key as keyof typeof updateData] === undefined) {
+        delete updateData[key as keyof typeof updateData];
+      }
     });
+    
+    console.log('Final update data after filtering:', updateData);
+    
+    // At least one field should be updated
+    if (Object.keys(updateData).length === 0) {
+      console.error('No fields provided for update');
+      res.status(400).json({
+        success: false,
+        message: 'At least one field is required for update'
+      });
+      return;
+    }
+
+    const updatedUser = await updateProviderProfile(userId, updateData);
 
     res.status(200).json({
       success: true,
@@ -105,6 +141,7 @@ export const handleUpdateProviderProfile = async (req: Request, res: Response) =
     return;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    console.error('Error updating provider profile:', error);
     res.status(400).json({
       success: false,
       message: errorMessage
@@ -529,6 +566,95 @@ export const handleCreateService = async (req: Request, res: Response) => {
       success: true,
       message: 'Service created successfully',
       data: newService
+    });
+    return;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    res.status(400).json({
+      success: false,
+      message: errorMessage
+    });
+    return;
+  }
+};
+
+export const handleGetProviderServices = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user.id;
+    
+    if (!userId) {
+      res.status(400).json({
+        success: false,
+        message: 'User ID not found in token'
+      });
+      return;
+    }
+
+    const services = await getProviderServices(userId);
+
+    res.status(200).json({
+      success: true,
+      data: services
+    });
+    return;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    res.status(400).json({
+      success: false,
+      message: errorMessage
+    });
+    return;
+  }
+};
+
+export const handleUpdateProviderService = async (req: Request, res: Response) => {
+  try {
+    const userId = req.user.id;
+    const serviceId = req.params.serviceId;
+    
+    if (!userId) {
+      res.status(400).json({
+        success: false,
+        message: 'User ID not found in token'
+      });
+      return;
+    }
+
+    if (!serviceId) {
+      res.status(400).json({
+        success: false,
+        message: 'Service ID is required'
+      });
+      return;
+    }
+
+    const { title, description, categoryId, pricing, pricingType, imageUrls, isActive, skillIds } = req.body;
+
+    // At least one field should be provided for update
+    if (!title && !description && !categoryId && pricing === undefined && 
+        !pricingType && imageUrls === undefined && isActive === undefined && !skillIds) {
+      res.status(400).json({
+        success: false,
+        message: 'At least one field is required for update'
+      });
+      return;
+    }
+
+    const updatedService = await updateProviderService(userId, serviceId, {
+      title,
+      description,
+      categoryId,
+      pricing: pricing !== undefined ? parseFloat(pricing) : undefined,
+      pricingType,
+      imageUrls,
+      isActive,
+      skillIds
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Service updated successfully',
+      data: updatedService
     });
     return;
   } catch (error) {

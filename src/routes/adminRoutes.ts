@@ -7,9 +7,13 @@ import {
   handleRejectProviderVerification,
   handleGetAllClients,
   handleGetAllProviders,
-  handleChangeUserPassword
+  handleChangeUserPassword,
+  handleCreateCategory,
+  handleGetAllCategories,
+  handleEditCategory
 } from '../httpControllers/adminHttpController';
 import { authenticateToken, authorizeRoles } from '../middlewares/authMiddleware';
+import { uploadFile } from '../middlewares/fileHandler';
 
 const router = express.Router();
 
@@ -47,6 +51,23 @@ router.post('/providers/reject', authenticateToken, authorizeRoles('ADMIN'), han
 
 // User management
 router.post('/users/change-password', authenticateToken, authorizeRoles('ADMIN'), handleChangeUserPassword);
+
+// Category management
+router.post(
+  '/category',
+  authenticateToken,
+  authorizeRoles('ADMIN'),
+  uploadFile.single('categoryImage'),
+  handleCreateCategory
+);
+router.get('/category', authenticateToken, authorizeRoles('ADMIN'), handleGetAllCategories);
+router.patch(
+  '/category/:categoryId',
+  authenticateToken,
+  authorizeRoles('ADMIN'),
+  uploadFile.single('categoryImage'),
+  handleEditCategory
+);
 
 // Add this comment to remind yourself to secure or remove these routes
 /*
