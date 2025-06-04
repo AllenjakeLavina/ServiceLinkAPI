@@ -1258,8 +1258,8 @@ export const getUnreadNotificationCount = async (userId: string) => {
     });
     
     if (!user) {
-      console.error(`User with ID ${userId} not found`);
-      throw new Error('User not found');
+      console.warn(`User with ID ${userId} not found, returning 0 notifications`);
+      return 0; // Return 0 instead of throwing an error
     }
     
     // Let's check the total number of notifications in the system for debugging

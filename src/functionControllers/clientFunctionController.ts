@@ -603,7 +603,8 @@ export const getClientBookings = async (
             }
           }
         },
-        address: true
+        address: true,
+        payment: true
       },
       orderBy: {
         startTime: 'desc'
@@ -804,11 +805,27 @@ export const processPayment = async (
       });
     }
 
-    // Update booking status to CONFIRMED
-    const updatedBooking = await prisma.serviceBooking.update({
-      where: { id: booking.id },
-      data: { status: 'CONFIRMED' }
-    });
+    // Only update booking status to CONFIRMED if it's not already COMPLETED
+    let updatedBooking;
+    if (booking.status !== 'COMPLETED') {
+      updatedBooking = await prisma.serviceBooking.update({
+        where: { id: booking.id },
+        data: { status: 'CONFIRMED' }
+      });
+    } else {
+      // For COMPLETED status, ensure we return the actual booking data
+      updatedBooking = await prisma.serviceBooking.findUnique({
+        where: { id: booking.id },
+        include: {
+          service: true,
+          serviceProvider: {
+            include: { user: true }
+          },
+          client: true,
+          payment: true
+        }
+      });
+    }
 
     // Create notification for provider
     await prisma.notification.create({
@@ -828,6 +845,7 @@ export const processPayment = async (
       }
     });
 
+    // Return the updated booking and payment information
     return {
       booking: updatedBooking,
       payment
@@ -896,7 +914,8 @@ export const markPaymentCompleted = async (
       }
     });
 
-    // Update booking status to IN_PROGRESS if it's CONFIRMED
+    // Update booking status to IN_PROGRESS only if it's CONFIRMED
+    // Don't change status if it's already COMPLETED
     if (booking.status === 'CONFIRMED') {
       await prisma.serviceBooking.update({
         where: { id: booking.id },
